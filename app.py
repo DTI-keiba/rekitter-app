@@ -3,6 +3,7 @@ from openai import OpenAI
 import json
 import time
 import re
+import random
 
 # --- 1. OpenAI APIキーの設定 (Secrets) ---
 try:
@@ -32,7 +33,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# ハッシュタグを青くする関数
 def format_content(text):
     formatted_text = re.sub(r'(#\w+)', r'<span class="hashtag">\1</span>', text)
     return formatted_text.replace('\n', '<br>')
@@ -47,27 +47,22 @@ if "is_running" not in st.session_state:
 if "current_round" not in st.session_state:
     st.session_state.current_round = 0
 
-# --- 5. サイドバー (全機能維持) ---
+# --- 5. サイドバー (全機能維持 + 新機能追加) ---
 with st.sidebar:
     st.header("🎮 操作パネル")
     
-    # 往復回数
+    # 往復回数 (維持)
     st.subheader("🔁 論争の長さ")
-    max_rounds = st.number_input("往復回数（AIが喋る総数）", min_value=1, max_value=50, value=6)
+    max_rounds = st.number_input("往復回数（総投稿数）", min_value=1, max_value=50, value=10)
     
     st.divider()
     
-    # テーマ選択
+    # テーマ選択 (維持)
     st.subheader("📢 論争テーマ")
-    theme_options = [
-        "宗教改革 (免罪符や教皇の権威について)", 
-        "聖書の解釈 (ラテン語か民衆の言葉か)", 
-        "現代のSNSについて (もしルターがXを使っていたら)",
-        "自由テーマ (下の入力欄を使用)"
-    ]
+    theme_options = ["宗教改革 (免罪符について)", "聖書の解釈", "現代のSNSについて", "自由テーマ"]
     selected_theme = st.selectbox("テーマ選択", theme_options)
     custom_theme = st.text_input("自由テーマ入力", "")
-    current_theme = custom_theme if selected_theme == "自由テーマ (下の入力欄を使用)" else selected_theme
+    current_theme = custom_theme if selected_theme == "自由テーマ" else selected_theme
 
     st.divider()
     col1, col2 = st.columns(2)
@@ -87,21 +82,55 @@ with st.sidebar:
 
     st.divider()
     
-    # 個別投稿
+    # --- 個別投稿機能 (大幅強化：自動・手動の二刀流) ---
     st.header("✍️ 個別投稿")
     char_ids = list(characters_data.keys())
-    selected_id = st.selectbox("投稿者を選択", options=char_ids, format_func=lambda x: characters_data[x].get('name', x))
-    user_text = st.text_area("内容を入力")
-    if st.button("📤 投稿する"):
-        if user_text:
-            char = characters_data[selected_id]
-            st.session_state.messages.append({
-                "role": selected_id, "name": char.get('name'), 
-                "content": user_text, "avatar": f"static/{char.get('image')}"
-            })
-            st.rerun()
+    # 選択肢に「市民」を一時的に追加
+    post_char_ids = char_ids + ["citizen"]
+    selected_id = st.selectbox(
+        "投稿者を選択", 
+        options=post_char_ids, 
+        format_func=lambda x: characters_data[x].get('name') if x in characters_data else "名もなき市民"
+    )
+    
+    user_text = st.text_area("内容を入力（手動用）", placeholder="手動入力する場合はここに...")
+    
+    c_auto, c_manual = st.columns(2)
+    with c_manual:
+        if st.button("📤 手動で投稿"):
+            if user_text:
+                if selected_id == "citizen":
+                    name, avatar = "市民", "👤"
+                else:
+                    char = characters_data[selected_id]
+                    name, avatar = char.get('name'), f"static/{char.get('image')}"
+                st.session_state.messages.append({"role": selected_id, "name": name, "content": user_text, "avatar": avatar})
+                st.rerun()
 
-# --- 6. メイン表示エリア (最新を上にする表示順を維持) ---
+    with c_auto:
+        if st.button("🤖 AIが自動作成"):
+            # 個別自動投稿ロジック
+            with st.spinner("AIが考案中..."):
+                if selected_id == "citizen":
+                    role_inst = "あなたは当時の庶民です。議論を傍観している立場です。"
+                else:
+                    char = characters_data[selected_id]
+                    role_inst = f"あなたは{char.get('name')}です。{char.get('description')} 絶対に妥協しないでください。"
+                
+                prompt = f"{role_inst} テーマ『{current_theme}』について、140文字以内でSNS風の投稿を1つだけ作ってください。ハッシュタグも付けてください。"
+                res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200)
+                ai_text = res.choices[0].message.content
+                
+                if selected_id == "citizen":
+                    name, avatar = "市民", "👤"
+                else:
+                    char = characters_data[selected_id]
+                    name, avatar = char.get('name'), f"static/{char.get('image')}"
+                
+                st.session_state.messages.append({"role": selected_id, "name": name, "content": ai_text, "avatar": avatar})
+                st.rerun()
+
+# --- 6. メイン表示エリア (最新が上) ---
 st.info(f"現在のテーマ: {current_theme} (進行状況: {st.session_state.current_round}/{max_rounds})")
 
 message_container = st.container()
@@ -113,7 +142,7 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (思想強化＆回数制限) ---
+# --- 7. 自動論争ロジック (市民のつぶやきを混ぜる) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
@@ -121,23 +150,28 @@ if st.session_state.is_running:
         st.rerun()
     
     char_ids = list(characters_data.keys())
-    last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else char_ids[1]
-    current_char_id = char_ids[0] if last_role == char_ids[1] else char_ids[1]
-    char = characters_data[current_char_id]
+    # 投稿順序の決定 (ルター -> 教皇 -> 時々市民)
+    # 直近3件に市民がいなければ、20%の確率で市民が出るように設定
+    last_three = [m["role"] for m in st.session_state.messages[-3:]]
+    if "citizen" not in last_three and random.random() < 0.3:
+        current_char_id = "citizen"
+    else:
+        last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else char_ids[1]
+        current_char_id = char_ids[0] if last_role == char_ids[1] else char_ids[1]
 
-    with st.spinner(f"{char.get('name')}が投稿を準備中..."):
-        # キャラクターごとの厳格な性格設定
-        if "luther" in current_char_id.lower():
-            role_instruction = "あなたはマルティン・ルターです。信仰のみを重んじ、カトリック教会の腐敗と教皇の権威を徹底的に否定してください。絶対に妥協せず、激しい言葉で反論してください。"
-        elif "leo" in current_char_id.lower():
-            role_instruction = "あなたは教皇レオ10世です。教会の伝統と自らの権威こそが神の意志であると信じています。ルターを教会の和を乱す高慢な異端者として見下し、断罪してください。"
+    with st.spinner(f"思考中..."):
+        if current_char_id == "luther":
+            role_inst = "あなたはマルティン・ルターです。教会の腐敗を許さない改革者。信仰のみを重んじ、教皇を断固拒絶してください。"
+            name, avatar = characters_data[current_char_id].get('name'), f"static/{characters_data[current_char_id].get('image')}"
+        elif current_char_id == "leo":
+            role_inst = "あなたは教皇レオ10世です。教会の絶対的な権威。ルターを迷える異端として見下し、断罪してください。"
+            name, avatar = characters_data[current_char_id].get('name'), f"static/{characters_data[current_char_id].get('image')}"
         else:
-            role_instruction = f"あなたは{char.get('name')}です。{char.get('description')}"
+            role_inst = "あなたは当時の名もなき市民です。ルターと教皇の争いを見て、不安になったり、どちらかを応援したり、世の中の混乱を嘆いたりしてください。"
+            name, avatar = "市民のつぶやき", "👤"
 
         system_prompt = (
-            f"{role_instruction} 現在のテーマは『{current_theme}』です。"
-            "140文字以内で、相手の主張を論破するか、自らの正当性をSNS投稿風に述べてください。"
-            "相手に同調してはいけません。ハッシュタグ（#）も混ぜてください。"
+            f"{role_inst} テーマは『{current_theme}』。140文字以内で、自分の立場を鮮明にしたSNS投稿をしてください。ハッシュタグも青くなるので必ず入れてください。"
         )
         
         context = [{"role": "system", "content": system_prompt}]
@@ -147,21 +181,14 @@ if st.session_state.is_running:
         try:
             response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=200)
             answer = response.choices[0].message.content
-            
-            st.session_state.messages.append({
-                "role": current_char_id, "name": char.get('name'),
-                "content": answer, "avatar": f"static/{char.get('image')}"
-            })
-            
+            st.session_state.messages.append({"role": current_char_id, "name": name, "content": answer, "avatar": avatar})
             st.session_state.current_round += 1
             display_messages()
-            time.sleep(4) # 読み込み感を出さないための十分な待機
+            time.sleep(4) 
             st.rerun()
-
         except Exception as e:
-            st.error(f"AI通信エラー: {e}")
+            st.error(f"エラー: {e}")
             st.session_state.is_running = False
 
-# 停止中、または最初の表示
 if not st.session_state.is_running:
     display_messages()
