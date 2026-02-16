@@ -51,11 +51,13 @@ if "current_round" not in st.session_state:
 with st.sidebar:
     st.header("🎮 操作パネル")
     
+    # 往復回数 (維持)
     st.subheader("🔁 論争の長さ")
     max_rounds = st.number_input("往復回数（総投稿数）", min_value=1, max_value=50, value=10)
     
     st.divider()
     
+    # テーマ選択 (維持)
     st.subheader("📢 論争テーマ")
     theme_options = ["宗教改革 (免罪符について)", "聖書の解釈", "現代のSNSについて", "自由テーマ"]
     selected_theme = st.selectbox("テーマ選択", theme_options)
@@ -138,7 +140,7 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (配役バランスを厳密に調整) ---
+# --- 7. 自動論争ロジック (配役ロジックを根本修正) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
@@ -146,37 +148,41 @@ if st.session_state.is_running:
         st.rerun()
     
     char_ids = list(characters_data.keys())
+    # キャラクターIDを特定 (luther, leo という文字列を含むキーを探す)
+    luther_id = next((k for k in char_ids if 'luther' in k.lower()), char_ids[0])
+    leo_id = next((k for k in char_ids if 'leo' in k.lower()), char_ids[1] if len(char_ids) > 1 else char_ids[0])
     
-    # 次の投稿者を決めるロジック
-    if st.session_state.current_round < 2:
-        # 最初の2回は必ず主要人物から開始 (ルター -> 教皇 の順)
-        current_char_id = char_ids[0] if st.session_state.current_round == 0 else char_ids[1]
+    # 次の投稿者を決定するロジック
+    if st.session_state.current_round == 0:
+        current_char_id = luther_id
+    elif st.session_state.current_round == 1:
+        current_char_id = leo_id
     else:
         last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else "none"
-        
-        # 市民の出現条件: 直前が市民でない、かつ 25%の確率
-        if last_role != "citizen" and random.random() < 0.25:
+        # 市民の出現率を15%に下げ、かつ市民の次は必ず主要人物にする
+        if last_role != "citizen" and random.random() < 0.15:
             current_char_id = "citizen"
         else:
-            # 主要人物同士を交代させる
-            # 直近の主要人物のroleを探す
-            main_roles = [m["role"] for m in reversed(st.session_state.messages) if m["role"] in char_ids]
-            last_main_role = main_roles[0] if main_roles else char_ids[1]
-            current_char_id = char_ids[0] if last_main_role == char_ids[1] else char_ids[1]
+            # 直近の主要人物(市民以外)がどちらだったかを探す
+            main_history = [m["role"] for m in reversed(st.session_state.messages) if m["role"] in [luther_id, leo_id]]
+            last_main = main_history[0] if main_history else leo_id
+            current_char_id = luther_id if last_main == leo_id else leo_id
 
     with st.spinner(f"思考中..."):
-        if current_char_id == "luther":
+        if current_char_id == luther_id:
             role_inst = "あなたはマルティン・ルターです。教会の腐敗を許さない改革者。信仰のみを重んじ、教皇を断固拒絶してください。"
-            name, avatar = characters_data[current_char_id].get('name'), f"static/{characters_data[current_char_id].get('image')}"
-        elif current_char_id == "leo":
+            char_info = characters_data[current_char_id]
+            name, avatar = char_info.get('name'), f"static/{char_info.get('image')}"
+        elif current_char_id == leo_id:
             role_inst = "あなたは教皇レオ10世です。教会の絶対的な権威。ルターを異端として見下し、断罪してください。"
-            name, avatar = characters_data[current_char_id].get('name'), f"static/{characters_data[current_char_id].get('image')}"
+            char_info = characters_data[current_char_id]
+            name, avatar = char_info.get('name'), f"static/{char_info.get('image')}"
         else:
-            role_inst = "あなたは当時の市民です。ルターと教皇の争いを見て、素直な感想を述べてください。"
+            role_inst = "あなたは当時の庶民です。ルターと教皇の激しい争いを一言で野次馬的に、あるいは不安そうにつぶやいてください。"
             name, avatar = "市民のつぶやき", "👤"
 
         system_prompt = (
-            f"{role_inst} テーマは『{current_theme}』。140文字以内でSNS投稿をしてください。ハッシュタグも入れてください。"
+            f"{role_inst} テーマは『{current_theme}』。140文字以内でSNS投稿をしてください。ハッシュタグを必ず青く表示されるように入れてください。"
         )
         
         context = [{"role": "system", "content": system_prompt}]
