@@ -3,34 +3,26 @@ from openai import OpenAI
 import json
 import time
 
-# --- 1. OpenAI APIキーの設定 (Secretsを使用) ---
+# --- 1. OpenAI APIキーの設定 (Secrets) ---
 try:
     OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
     client = OpenAI(api_key=OPENAI_API_KEY)
 except Exception:
-    st.error("APIキーが金庫(Secrets)に設定されていません。")
+    st.error("APIキーが設定されていません。")
     st.stop()
 
-# --- 2. データ読み込み (エラーを物理的に回避する超頑丈なロジック) ---
+# --- 2. データ読み込み (リスト/辞書両対応) ---
 def load_characters():
     with open('characters.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
-    
-    # ここでリスト [ ] を 強引に辞書 { } に変換します
     if isinstance(data, list):
-        new_dict = {}
-        for i, item in enumerate(data):
-            # idがあればそれを使い、なければimage名や仮のIDを割り当てる
-            char_id = item.get('id', item.get('image', f'char_{i}')).split('.')[0]
-            new_dict[char_id] = item
-        return new_dict
+        return {item.get('id', item.get('image', f'char_{i}').split('.')[0]): item for i, item in enumerate(data)}
     return data
 
 characters_data = load_characters()
 
-# --- 3. 画面表示の設定 (モバイル最適化CSSを1ミリも削らず維持) ---
+# --- 3. 画面設定 ---
 st.set_page_config(page_title="歴ッター (Rekitter)", layout="wide")
-
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 20px; font-weight: bold; }
@@ -39,7 +31,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("📜 歴ッター (Rekitter)")
-st.caption("歴史上の人物たちがSNSで対話します")
 
 # --- 4. セッション状態の初期化 ---
 if "messages" not in st.session_state:
@@ -47,11 +38,11 @@ if "messages" not in st.session_state:
 if "is_running" not in st.session_state:
     st.session_state.is_running = False
 
-# --- 5. サイドバー (全機能を維持) ---
+# --- 5. サイドバー (全機能維持：テーマ選択・個別投稿) ---
 with st.sidebar:
     st.header("🎮 操作パネル")
     
-    # 論争テーマ選択
+    # テーマ選択
     st.subheader("📢 論争テーマ")
     theme_options = [
         "宗教改革 (免罪符や教皇の権威について)", 
@@ -64,8 +55,6 @@ with st.sidebar:
     current_theme = custom_theme if selected_theme == "自由テーマ (下の入力欄を使用)" else selected_theme
 
     st.divider()
-
-    # 自動論争コントロール
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🚀 論争開始"):
@@ -80,79 +69,63 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-
-    # 個別投稿機能 (エラーの真犯人だった場所)
     st.header("✍️ 個別投稿")
-    # ここで characters_data.keys() を呼んでもエラーにならないよう保証済み
     char_ids = list(characters_data.keys())
-    
-    selected_id = st.selectbox(
-        "投稿者を選択", 
-        options=char_ids, 
-        format_func=lambda x: characters_data[x].get('name', x)
-    )
-    user_text = st.text_area("内容を入力", placeholder="メッセージを入力...")
-    
+    selected_id = st.selectbox("投稿者を選択", options=char_ids, format_func=lambda x: characters_data[x].get('name', x))
+    user_text = st.text_area("内容を入力")
     if st.button("📤 投稿する"):
         if user_text:
             char = characters_data[selected_id]
-            st.session_state.messages.append({
-                "role": selected_id, 
-                "name": char.get('name', '不明'),
-                "content": user_text, 
-                "avatar": f"static/{char.get('image', 'default.jpg')}"
-            })
+            st.session_state.messages.append({"role": selected_id, "name": char.get('name'), "content": user_text, "avatar": f"static/{char.get('image')}"})
             st.rerun()
 
-# --- 6. メッセージ表示 (最新を上にする表示を維持) ---
-def display_messages():
-    for msg in reversed(st.session_state.messages):
-        with st.chat_message(msg["role"], avatar=msg["avatar"]):
-            st.write(f"**{msg['name']}** @{msg['role']}")
-            st.write(msg["content"])
+# --- 6. メイン表示エリア (最新が上) ---
+# ここに現在のテーマを表示
+st.info(f"現在のテーマ: {current_theme}")
 
-# --- 7. 自動論争ロジック (ループ・読み込み待ち修正版) ---
+# メッセージ表示用のコンテナ
+message_container = st.container()
+
+def display_messages():
+    with message_container:
+        for msg in reversed(st.session_state.messages):
+            with st.chat_message(msg["role"], avatar=msg["avatar"]):
+                st.write(f"**{msg['name']}** @{msg['role']}")
+                st.write(msg["content"])
+
+# --- 7. 自動論争ロジック (フリーズ回避・視覚効果追加) ---
 if st.session_state.is_running:
     char_ids = list(characters_data.keys())
-    # 交互に投稿させる判定
     last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else char_ids[1]
     current_char_id = char_ids[0] if last_role == char_ids[1] else char_ids[1]
     char = characters_data[current_char_id]
 
-    system_prompt = (
-        f"あなたは{char.get('name')}です。{char.get('description')} "
-        f"現在の論争テーマは『{current_theme}』です。"
-        "140文字以内で反論や主張をSNS投稿風に述べてください。"
-    )
+    # 読み込み中であることをユーザーに知らせる
+    with st.spinner(f"{char.get('name')}が投稿を準備中..."):
+        system_prompt = f"あなたは{char.get('name')}です。{char.get('description')} テーマ『{current_theme}』について140文字以内で反論や主張を述べてください。"
+        context = [{"role": "system", "content": system_prompt}]
+        for m in st.session_state.messages[-5:]:
+            context.append({"role": "user", "content": m["content"]})
 
-    context = [{"role": "system", "content": system_prompt}]
-    for m in st.session_state.messages[-5:]:
-        context.append({"role": "user", "content": m["content"]})
+        try:
+            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=200)
+            answer = response.choices[0].message.content
+            
+            # メッセージを追加
+            st.session_state.messages.append({
+                "role": current_char_id, "name": char.get('name'),
+                "content": answer, "avatar": f"static/{char.get('image')}"
+            })
+            
+            # 画面を一度表示させてから待機
+            display_messages()
+            time.sleep(3) # 3秒待ってから次へ
+            st.rerun()
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=context,
-            max_tokens=200
-        )
-        answer = response.choices[0].message.content
-        st.session_state.messages.append({
-            "role": current_char_id, 
-            "name": char.get('name', '不明'),
-            "content": answer, 
-            "avatar": f"static/{char.get('image', 'default.jpg')}"
-        })
-        
-        # 画面を一度反映させるための待機
-        time.sleep(4) 
-        st.rerun()
+        except Exception as e:
+            st.error(f"AI通信エラー: {e}")
+            st.session_state.is_running = False
 
-    except Exception as e:
-        st.error(f"AI通信エラー: {e}")
-        st.session_state.is_running = False
-
-# --- 8. メイン表示 ---
-if not st.session_state.messages:
-    st.info(f"テーマ: {current_theme}\n左側のパネルから開始してください。")
-else:
+# 停止中、または最初の表示
+if not st.session_state.is_running:
     display_messages()
