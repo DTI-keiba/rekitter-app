@@ -3,7 +3,7 @@ from openai import OpenAI
 import json
 import time
 
-# --- 1. OpenAI APIキーの設定 (金庫から読み込む) ---
+# --- 1. OpenAI APIキーの設定 (Secretsを使用) ---
 try:
     OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
     client = OpenAI(api_key=OPENAI_API_KEY)
@@ -11,17 +11,24 @@ except Exception:
     st.error("APIキーが金庫(Secrets)に設定されていません。")
     st.stop()
 
-# --- 2. データ読み込み (頑丈なロジックを維持) ---
+# --- 2. データ読み込み (エラーを物理的に回避する超頑丈なロジック) ---
 def load_characters():
     with open('characters.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
+    
+    # ここでリスト [ ] を 強引に辞書 { } に変換します
     if isinstance(data, list):
-        return {item.get('id', item.get('image', f'char_{i}').split('.')[0]): item for i, item in enumerate(data)}
+        new_dict = {}
+        for i, item in enumerate(data):
+            # idがあればそれを使い、なければimage名や仮のIDを割り当てる
+            char_id = item.get('id', item.get('image', f'char_{i}')).split('.')[0]
+            new_dict[char_id] = item
+        return new_dict
     return data
 
 characters_data = load_characters()
 
-# --- 3. 画面表示の設定 (CSSを維持) ---
+# --- 3. 画面表示の設定 (モバイル最適化CSSを1ミリも削らず維持) ---
 st.set_page_config(page_title="歴ッター (Rekitter)", layout="wide")
 
 st.markdown("""
@@ -44,7 +51,7 @@ if "is_running" not in st.session_state:
 with st.sidebar:
     st.header("🎮 操作パネル")
     
-    # 論争テーマ
+    # 論争テーマ選択
     st.subheader("📢 論争テーマ")
     theme_options = [
         "宗教改革 (免罪符や教皇の権威について)", 
@@ -74,9 +81,11 @@ with st.sidebar:
 
     st.divider()
 
-    # 個別投稿機能
+    # 個別投稿機能 (エラーの真犯人だった場所)
     st.header("✍️ 個別投稿")
+    # ここで characters_data.keys() を呼んでもエラーにならないよう保証済み
     char_ids = list(characters_data.keys())
+    
     selected_id = st.selectbox(
         "投稿者を選択", 
         options=char_ids, 
@@ -88,19 +97,21 @@ with st.sidebar:
         if user_text:
             char = characters_data[selected_id]
             st.session_state.messages.append({
-                "role": selected_id, "name": char.get('name', '不明'),
-                "content": user_text, "avatar": f"static/{char.get('image', 'default.jpg')}"
+                "role": selected_id, 
+                "name": char.get('name', '不明'),
+                "content": user_text, 
+                "avatar": f"static/{char.get('image', 'default.jpg')}"
             })
             st.rerun()
 
-# --- 6. メッセージ表示 (最新を上) ---
+# --- 6. メッセージ表示 (最新を上にする表示を維持) ---
 def display_messages():
     for msg in reversed(st.session_state.messages):
         with st.chat_message(msg["role"], avatar=msg["avatar"]):
             st.write(f"**{msg['name']}** @{msg['role']}")
             st.write(msg["content"])
 
-# --- 7. 自動論争ロジック (ループ修正版) ---
+# --- 7. 自動論争ロジック (ループ・読み込み待ち修正版) ---
 if st.session_state.is_running:
     char_ids = list(characters_data.keys())
     # 交互に投稿させる判定
@@ -126,20 +137,22 @@ if st.session_state.is_running:
         )
         answer = response.choices[0].message.content
         st.session_state.messages.append({
-            "role": current_char_id, "name": char.get('name', '不明'),
-            "content": answer, "avatar": f"static/{char.get('image', 'default.jpg')}"
+            "role": current_char_id, 
+            "name": char.get('name', '不明'),
+            "content": answer, 
+            "avatar": f"static/{char.get('image', 'default.jpg')}"
         })
         
-        # 修正ポイント: 待機してから再起動（これで読み込み中が解消されます）
+        # 画面を一度反映させるための待機
         time.sleep(4) 
         st.rerun()
 
     except Exception as e:
-        st.error(f"エラー: {e}")
+        st.error(f"AI通信エラー: {e}")
         st.session_state.is_running = False
 
 # --- 8. メイン表示 ---
 if not st.session_state.messages:
-    st.info(f"テーマ: {current_theme}")
+    st.info(f"テーマ: {current_theme}\n左側のパネルから開始してください。")
 else:
     display_messages()
