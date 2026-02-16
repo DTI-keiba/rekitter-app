@@ -11,20 +11,17 @@ except Exception:
     st.error("APIキーが未設定です。StreamlitのSecrets設定を確認してください。")
     st.stop()
 
-# --- 2. データ読み込み (エラー回避の強化版) ---
+# --- 2. データ読み込み (リスト/辞書両対応の頑丈なロジックを維持) ---
 def load_characters():
     with open('characters.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
-    
-    # もしリスト形式 [...] で書かれていた場合、辞書形式 { } に自動変換する
     if isinstance(data, list):
-        # 画像ファイル名や名前からIDを自動生成して辞書にする
         return {item.get('id', item.get('image', f'char_{i}').split('.')[0]): item for i, item in enumerate(data)}
     return data
 
 characters_data = load_characters()
 
-# --- 3. 画面表示の設定 ---
+# --- 3. 画面表示の設定 (モバイル最適化CSSを維持) ---
 st.set_page_config(page_title="歴ッター (Rekitter)", layout="wide")
 
 st.markdown("""
@@ -47,6 +44,23 @@ if "is_running" not in st.session_state:
 with st.sidebar:
     st.header("🎮 操作パネル")
     
+    # 【新機能】論争テーマの選択
+    st.subheader("📢 論争テーマの選択")
+    theme_options = [
+        "宗教改革 (免罪符や教皇の権威について)", 
+        "聖書の解釈 (ラテン語か民衆の言葉か)", 
+        "現代のSNSについて (もしルターがXを使っていたら)",
+        "自由テーマ (下のテキスト入力を使用)"
+    ]
+    selected_theme = st.selectbox("テーマを選んでください", theme_options)
+    custom_theme = st.text_input("自由テーマ（上の選択肢で自由テーマを選んだ場合）", "")
+    
+    # 最終的なテーマの決定
+    current_theme = custom_theme if selected_theme == "自由テーマ (下のテキスト入力を使用)" else selected_theme
+
+    st.divider()
+
+    # 自動論争コントロール
     col1, col2 = st.columns(2)
     with col1:
         if st.button("🚀 論争開始"):
@@ -62,11 +76,9 @@ with st.sidebar:
 
     st.divider()
 
-    # --- 個別投稿機能 (ここがエラーの場所でした) ---
+    # 個別投稿機能 (完全に維持)
     st.header("✍️ 個別投稿")
-    # 安全にキーの一覧を取得
     char_ids = list(characters_data.keys())
-    
     selected_id = st.selectbox(
         "投稿者を選択", 
         options=char_ids, 
@@ -85,24 +97,28 @@ with st.sidebar:
             })
             st.rerun()
 
-# --- 6. メッセージ表示 ---
+# --- 6. メッセージ表示 (最新を上にする表示順を維持) ---
 def display_messages():
     for msg in reversed(st.session_state.messages):
         with st.chat_message(msg["role"], avatar=msg["avatar"]):
             st.write(f"**{msg['name']}** @{msg['role']}")
             st.write(msg["content"])
 
-# --- 7. 自動論争ロジック ---
+# --- 7. 自動論争ロジック (テーマをAIに伝えるように強化) ---
 if st.session_state.is_running:
-    # 最後に投稿した人とは別の人が選ばれるようにする
     char_ids = list(characters_data.keys())
-    last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else char_ids[0]
-    
-    # 交互に入れ替える
+    last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else char_ids[1]
     current_char_id = char_ids[0] if last_role == char_ids[1] else char_ids[1]
     char = characters_data[current_char_id]
 
-    context = [{"role": "system", "content": f"あなたは{char.get('name')}です。{char.get('description')} 140文字以内で反論や主張を述べてください。"}]
+    # AIへの指示に「現在のテーマ」を組み込む
+    system_prompt = (
+        f"あなたは{char.get('name')}です。{char.get('description')} "
+        f"現在の論争テーマは『{current_theme}』です。"
+        "140文字以内で、このテーマに沿って相手に反論するか、自分の主張をSNS投稿風に述べてください。"
+    )
+
+    context = [{"role": "system", "content": system_prompt}]
     for m in st.session_state.messages[-5:]:
         context.append({"role": "user", "content": m["content"]})
 
@@ -129,6 +145,6 @@ if st.session_state.is_running:
 
 # --- 8. メイン表示エリア ---
 if not st.session_state.messages:
-    st.info("左側のパネルから『論争開始』を押すか、個別投稿を行ってください。")
+    st.info(f"現在のテーマ: {current_theme}\n左側のパネルから開始してください。")
 else:
     display_messages()
