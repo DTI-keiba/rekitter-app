@@ -3,7 +3,7 @@ from openai import OpenAI
 import json
 import time
 
-# --- 1. OpenAI APIキーの設定 (金庫から読み込む：ここには直接書かない) ---
+# --- 1. OpenAI APIキーの設定 (金庫から読み込む) ---
 try:
     OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
     client = OpenAI(api_key=OPENAI_API_KEY)
@@ -11,7 +11,7 @@ except Exception:
     st.error("APIキーが金庫(Secrets)に設定されていません。")
     st.stop()
 
-# --- 2. データ読み込み (頑丈なロジック) ---
+# --- 2. データ読み込み (頑丈なロジックを維持) ---
 def load_characters():
     with open('characters.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -21,7 +21,7 @@ def load_characters():
 
 characters_data = load_characters()
 
-# --- 3. 画面表示の設定 ---
+# --- 3. 画面表示の設定 (CSSを維持) ---
 st.set_page_config(page_title="歴ッター (Rekitter)", layout="wide")
 
 st.markdown("""
@@ -40,11 +40,11 @@ if "messages" not in st.session_state:
 if "is_running" not in st.session_state:
     st.session_state.is_running = False
 
-# --- 5. サイドバー (操作パネル) ---
+# --- 5. サイドバー (全機能を維持) ---
 with st.sidebar:
     st.header("🎮 操作パネル")
     
-    # 【テーマ選択】
+    # 論争テーマ
     st.subheader("📢 論争テーマ")
     theme_options = [
         "宗教改革 (免罪符や教皇の権威について)", 
@@ -74,7 +74,7 @@ with st.sidebar:
 
     st.divider()
 
-    # 個別投稿機能 (1ミリも削らず維持)
+    # 個別投稿機能
     st.header("✍️ 個別投稿")
     char_ids = list(characters_data.keys())
     selected_id = st.selectbox(
@@ -93,16 +93,17 @@ with st.sidebar:
             })
             st.rerun()
 
-# --- 6. メッセージ表示 (最新が上) ---
+# --- 6. メッセージ表示 (最新を上) ---
 def display_messages():
     for msg in reversed(st.session_state.messages):
         with st.chat_message(msg["role"], avatar=msg["avatar"]):
             st.write(f"**{msg['name']}** @{msg['role']}")
             st.write(msg["content"])
 
-# --- 7. 自動論争ロジック ---
+# --- 7. 自動論争ロジック (ループ修正版) ---
 if st.session_state.is_running:
     char_ids = list(characters_data.keys())
+    # 交互に投稿させる判定
     last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else char_ids[1]
     current_char_id = char_ids[0] if last_role == char_ids[1] else char_ids[1]
     char = characters_data[current_char_id]
@@ -128,8 +129,11 @@ if st.session_state.is_running:
             "role": current_char_id, "name": char.get('name', '不明'),
             "content": answer, "avatar": f"static/{char.get('image', 'default.jpg')}"
         })
+        
+        # 修正ポイント: 待機してから再起動（これで読み込み中が解消されます）
+        time.sleep(4) 
         st.rerun()
-        time.sleep(2)
+
     except Exception as e:
         st.error(f"エラー: {e}")
         st.session_state.is_running = False
