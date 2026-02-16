@@ -47,17 +47,15 @@ if "is_running" not in st.session_state:
 if "current_round" not in st.session_state:
     st.session_state.current_round = 0
 
-# --- 5. サイドバー (全機能維持 + 新機能追加) ---
+# --- 5. サイドバー (全機能維持) ---
 with st.sidebar:
     st.header("🎮 操作パネル")
     
-    # 往復回数 (維持)
     st.subheader("🔁 論争の長さ")
     max_rounds = st.number_input("往復回数（総投稿数）", min_value=1, max_value=50, value=10)
     
     st.divider()
     
-    # テーマ選択 (維持)
     st.subheader("📢 論争テーマ")
     theme_options = ["宗教改革 (免罪符について)", "聖書の解釈", "現代のSNSについて", "自由テーマ"]
     selected_theme = st.selectbox("テーマ選択", theme_options)
@@ -82,10 +80,9 @@ with st.sidebar:
 
     st.divider()
     
-    # --- 個別投稿機能 (大幅強化：自動・手動の二刀流) ---
+    # 個別投稿機能 (自動・手動二刀流を維持)
     st.header("✍️ 個別投稿")
     char_ids = list(characters_data.keys())
-    # 選択肢に「市民」を一時的に追加
     post_char_ids = char_ids + ["citizen"]
     selected_id = st.selectbox(
         "投稿者を選択", 
@@ -109,7 +106,6 @@ with st.sidebar:
 
     with c_auto:
         if st.button("🤖 AIが自動作成"):
-            # 個別自動投稿ロジック
             with st.spinner("AIが考案中..."):
                 if selected_id == "citizen":
                     role_inst = "あなたは当時の庶民です。議論を傍観している立場です。"
@@ -130,7 +126,7 @@ with st.sidebar:
                 st.session_state.messages.append({"role": selected_id, "name": name, "content": ai_text, "avatar": avatar})
                 st.rerun()
 
-# --- 6. メイン表示エリア (最新が上) ---
+# --- 6. メイン表示エリア ---
 st.info(f"現在のテーマ: {current_theme} (進行状況: {st.session_state.current_round}/{max_rounds})")
 
 message_container = st.container()
@@ -142,7 +138,7 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (市民のつぶやきを混ぜる) ---
+# --- 7. 自動論争ロジック (配役バランスを厳密に調整) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
@@ -150,28 +146,37 @@ if st.session_state.is_running:
         st.rerun()
     
     char_ids = list(characters_data.keys())
-    # 投稿順序の決定 (ルター -> 教皇 -> 時々市民)
-    # 直近3件に市民がいなければ、20%の確率で市民が出るように設定
-    last_three = [m["role"] for m in st.session_state.messages[-3:]]
-    if "citizen" not in last_three and random.random() < 0.3:
-        current_char_id = "citizen"
+    
+    # 次の投稿者を決めるロジック
+    if st.session_state.current_round < 2:
+        # 最初の2回は必ず主要人物から開始 (ルター -> 教皇 の順)
+        current_char_id = char_ids[0] if st.session_state.current_round == 0 else char_ids[1]
     else:
-        last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else char_ids[1]
-        current_char_id = char_ids[0] if last_role == char_ids[1] else char_ids[1]
+        last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else "none"
+        
+        # 市民の出現条件: 直前が市民でない、かつ 25%の確率
+        if last_role != "citizen" and random.random() < 0.25:
+            current_char_id = "citizen"
+        else:
+            # 主要人物同士を交代させる
+            # 直近の主要人物のroleを探す
+            main_roles = [m["role"] for m in reversed(st.session_state.messages) if m["role"] in char_ids]
+            last_main_role = main_roles[0] if main_roles else char_ids[1]
+            current_char_id = char_ids[0] if last_main_role == char_ids[1] else char_ids[1]
 
     with st.spinner(f"思考中..."):
         if current_char_id == "luther":
             role_inst = "あなたはマルティン・ルターです。教会の腐敗を許さない改革者。信仰のみを重んじ、教皇を断固拒絶してください。"
             name, avatar = characters_data[current_char_id].get('name'), f"static/{characters_data[current_char_id].get('image')}"
         elif current_char_id == "leo":
-            role_inst = "あなたは教皇レオ10世です。教会の絶対的な権威。ルターを迷える異端として見下し、断罪してください。"
+            role_inst = "あなたは教皇レオ10世です。教会の絶対的な権威。ルターを異端として見下し、断罪してください。"
             name, avatar = characters_data[current_char_id].get('name'), f"static/{characters_data[current_char_id].get('image')}"
         else:
-            role_inst = "あなたは当時の名もなき市民です。ルターと教皇の争いを見て、不安になったり、どちらかを応援したり、世の中の混乱を嘆いたりしてください。"
+            role_inst = "あなたは当時の市民です。ルターと教皇の争いを見て、素直な感想を述べてください。"
             name, avatar = "市民のつぶやき", "👤"
 
         system_prompt = (
-            f"{role_inst} テーマは『{current_theme}』。140文字以内で、自分の立場を鮮明にしたSNS投稿をしてください。ハッシュタグも青くなるので必ず入れてください。"
+            f"{role_inst} テーマは『{current_theme}』。140文字以内でSNS投稿をしてください。ハッシュタグも入れてください。"
         )
         
         context = [{"role": "system", "content": system_prompt}]
