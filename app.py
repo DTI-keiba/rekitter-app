@@ -3,15 +3,15 @@ from openai import OpenAI
 import json
 import time
 
-# --- 1. OpenAI APIキーの設定 (Secretsを使用) ---
+# --- 1. OpenAI APIキーの設定 (金庫から読み込む：ここには直接書かない) ---
 try:
     OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
     client = OpenAI(api_key=OPENAI_API_KEY)
 except Exception:
-    st.error("APIキーが未設定です。StreamlitのSecrets設定を確認してください。")
+    st.error("APIキーが金庫(Secrets)に設定されていません。")
     st.stop()
 
-# --- 2. データ読み込み (リスト/辞書両対応の頑丈なロジックを維持) ---
+# --- 2. データ読み込み (頑丈なロジック) ---
 def load_characters():
     with open('characters.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -21,7 +21,7 @@ def load_characters():
 
 characters_data = load_characters()
 
-# --- 3. 画面表示の設定 (モバイル最適化CSSを維持) ---
+# --- 3. 画面表示の設定 ---
 st.set_page_config(page_title="歴ッター (Rekitter)", layout="wide")
 
 st.markdown("""
@@ -44,19 +44,17 @@ if "is_running" not in st.session_state:
 with st.sidebar:
     st.header("🎮 操作パネル")
     
-    # 【新機能】論争テーマの選択
-    st.subheader("📢 論争テーマの選択")
+    # 【テーマ選択】
+    st.subheader("📢 論争テーマ")
     theme_options = [
         "宗教改革 (免罪符や教皇の権威について)", 
         "聖書の解釈 (ラテン語か民衆の言葉か)", 
         "現代のSNSについて (もしルターがXを使っていたら)",
-        "自由テーマ (下のテキスト入力を使用)"
+        "自由テーマ (下の入力欄を使用)"
     ]
-    selected_theme = st.selectbox("テーマを選んでください", theme_options)
-    custom_theme = st.text_input("自由テーマ（上の選択肢で自由テーマを選んだ場合）", "")
-    
-    # 最終的なテーマの決定
-    current_theme = custom_theme if selected_theme == "自由テーマ (下のテキスト入力を使用)" else selected_theme
+    selected_theme = st.selectbox("テーマ選択", theme_options)
+    custom_theme = st.text_input("自由テーマ入力", "")
+    current_theme = custom_theme if selected_theme == "自由テーマ (下の入力欄を使用)" else selected_theme
 
     st.divider()
 
@@ -76,7 +74,7 @@ with st.sidebar:
 
     st.divider()
 
-    # 個別投稿機能 (完全に維持)
+    # 個別投稿機能 (1ミリも削らず維持)
     st.header("✍️ 個別投稿")
     char_ids = list(characters_data.keys())
     selected_id = st.selectbox(
@@ -84,38 +82,35 @@ with st.sidebar:
         options=char_ids, 
         format_func=lambda x: characters_data[x].get('name', x)
     )
-    user_text = st.text_area("投稿内容を入力", placeholder="ここにメッセージを入力...")
+    user_text = st.text_area("内容を入力", placeholder="メッセージを入力...")
     
     if st.button("📤 投稿する"):
         if user_text:
             char = characters_data[selected_id]
             st.session_state.messages.append({
-                "role": selected_id,
-                "name": char.get('name', '不明'),
-                "content": user_text,
-                "avatar": f"static/{char.get('image', 'default.jpg')}"
+                "role": selected_id, "name": char.get('name', '不明'),
+                "content": user_text, "avatar": f"static/{char.get('image', 'default.jpg')}"
             })
             st.rerun()
 
-# --- 6. メッセージ表示 (最新を上にする表示順を維持) ---
+# --- 6. メッセージ表示 (最新が上) ---
 def display_messages():
     for msg in reversed(st.session_state.messages):
         with st.chat_message(msg["role"], avatar=msg["avatar"]):
             st.write(f"**{msg['name']}** @{msg['role']}")
             st.write(msg["content"])
 
-# --- 7. 自動論争ロジック (テーマをAIに伝えるように強化) ---
+# --- 7. 自動論争ロジック ---
 if st.session_state.is_running:
     char_ids = list(characters_data.keys())
     last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else char_ids[1]
     current_char_id = char_ids[0] if last_role == char_ids[1] else char_ids[1]
     char = characters_data[current_char_id]
 
-    # AIへの指示に「現在のテーマ」を組み込む
     system_prompt = (
         f"あなたは{char.get('name')}です。{char.get('description')} "
         f"現在の論争テーマは『{current_theme}』です。"
-        "140文字以内で、このテーマに沿って相手に反論するか、自分の主張をSNS投稿風に述べてください。"
+        "140文字以内で反論や主張をSNS投稿風に述べてください。"
     )
 
     context = [{"role": "system", "content": system_prompt}]
@@ -129,22 +124,18 @@ if st.session_state.is_running:
             max_tokens=200
         )
         answer = response.choices[0].message.content
-
         st.session_state.messages.append({
-            "role": current_char_id,
-            "name": char.get('name', '不明'),
-            "content": answer,
-            "avatar": f"static/{char.get('image', 'default.jpg')}"
+            "role": current_char_id, "name": char.get('name', '不明'),
+            "content": answer, "avatar": f"static/{char.get('image', 'default.jpg')}"
         })
         st.rerun()
         time.sleep(2)
-
     except Exception as e:
         st.error(f"エラー: {e}")
         st.session_state.is_running = False
 
-# --- 8. メイン表示エリア ---
+# --- 8. メイン表示 ---
 if not st.session_state.messages:
-    st.info(f"現在のテーマ: {current_theme}\n左側のパネルから開始してください。")
+    st.info(f"テーマ: {current_theme}")
 else:
     display_messages()
