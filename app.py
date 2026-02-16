@@ -22,7 +22,7 @@ def load_characters():
 
 characters_data = load_characters()
 
-# --- 3. 画面設定 & ハッシュタグ青色化CSS ---
+# --- 3. 画面設定 & ハッシュタグ青色化CSS (維持) ---
 st.set_page_config(page_title="歴ッター (Rekitter)", layout="wide")
 st.markdown("""
     <style>
@@ -32,9 +32,8 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# ハッシュタグを青くするための処理
+# ハッシュタグを青くする関数
 def format_content(text):
-    # #で始まる単語を探して、htmlタグで囲む
     formatted_text = re.sub(r'(#\w+)', r'<span class="hashtag">\1</span>', text)
     return formatted_text.replace('\n', '<br>')
 
@@ -48,17 +47,17 @@ if "is_running" not in st.session_state:
 if "current_round" not in st.session_state:
     st.session_state.current_round = 0
 
-# --- 5. サイドバー (全機能維持 + 往復回数設定) ---
+# --- 5. サイドバー (全機能維持) ---
 with st.sidebar:
     st.header("🎮 操作パネル")
     
-    # 往復回数の設定 (新機能)
+    # 往復回数
     st.subheader("🔁 論争の長さ")
     max_rounds = st.number_input("往復回数（AIが喋る総数）", min_value=1, max_value=50, value=6)
     
     st.divider()
     
-    # テーマ選択 (維持)
+    # テーマ選択
     st.subheader("📢 論争テーマ")
     theme_options = [
         "宗教改革 (免罪符や教皇の権威について)", 
@@ -75,7 +74,7 @@ with st.sidebar:
     with col1:
         if st.button("🚀 論争開始"):
             st.session_state.is_running = True
-            st.session_state.current_round = 0 # カウントリセット
+            st.session_state.current_round = 0 
     with col2:
         if st.button("⏹️ 停止"):
             st.session_state.is_running = False
@@ -88,7 +87,7 @@ with st.sidebar:
 
     st.divider()
     
-    # 個別投稿機能 (維持)
+    # 個別投稿
     st.header("✍️ 個別投稿")
     char_ids = list(characters_data.keys())
     selected_id = st.selectbox("投稿者を選択", options=char_ids, format_func=lambda x: characters_data[x].get('name', x))
@@ -97,14 +96,12 @@ with st.sidebar:
         if user_text:
             char = characters_data[selected_id]
             st.session_state.messages.append({
-                "role": selected_id, 
-                "name": char.get('name'), 
-                "content": user_text, 
-                "avatar": f"static/{char.get('image')}"
+                "role": selected_id, "name": char.get('name'), 
+                "content": user_text, "avatar": f"static/{char.get('image')}"
             })
             st.rerun()
 
-# --- 6. メイン表示エリア (最新が上) ---
+# --- 6. メイン表示エリア (最新を上にする表示順を維持) ---
 st.info(f"現在のテーマ: {current_theme} (進行状況: {st.session_state.current_round}/{max_rounds})")
 
 message_container = st.container()
@@ -114,12 +111,10 @@ def display_messages():
         for msg in reversed(st.session_state.messages):
             with st.chat_message(msg["role"], avatar=msg["avatar"]):
                 st.write(f"**{msg['name']}** @{msg['role']}")
-                # ハッシュタグを青くして表示
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (回数制限を追加) ---
+# --- 7. 自動論争ロジック (思想強化＆回数制限) ---
 if st.session_state.is_running:
-    # 指定回数に達したら停止
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
         st.success("指定された往復回数に達しました。")
@@ -131,11 +126,20 @@ if st.session_state.is_running:
     char = characters_data[current_char_id]
 
     with st.spinner(f"{char.get('name')}が投稿を準備中..."):
+        # キャラクターごとの厳格な性格設定
+        if "luther" in current_char_id.lower():
+            role_instruction = "あなたはマルティン・ルターです。信仰のみを重んじ、カトリック教会の腐敗と教皇の権威を徹底的に否定してください。絶対に妥協せず、激しい言葉で反論してください。"
+        elif "leo" in current_char_id.lower():
+            role_instruction = "あなたは教皇レオ10世です。教会の伝統と自らの権威こそが神の意志であると信じています。ルターを教会の和を乱す高慢な異端者として見下し、断罪してください。"
+        else:
+            role_instruction = f"あなたは{char.get('name')}です。{char.get('description')}"
+
         system_prompt = (
-            f"あなたは{char.get('name')}です。{char.get('description')} "
-            f"テーマ『{current_theme}』について140文字以内で主張してください。 "
-            "SNS風に、適宜ハッシュタグ（#）も混ぜてください。"
+            f"{role_instruction} 現在のテーマは『{current_theme}』です。"
+            "140文字以内で、相手の主張を論破するか、自らの正当性をSNS投稿風に述べてください。"
+            "相手に同調してはいけません。ハッシュタグ（#）も混ぜてください。"
         )
+        
         context = [{"role": "system", "content": system_prompt}]
         for m in st.session_state.messages[-5:]:
             context.append({"role": "user", "content": m["content"]})
@@ -149,11 +153,9 @@ if st.session_state.is_running:
                 "content": answer, "avatar": f"static/{char.get('image')}"
             })
             
-            # 往復カウントを増やす
             st.session_state.current_round += 1
-            
             display_messages()
-            time.sleep(3) 
+            time.sleep(4) # 読み込み感を出さないための十分な待機
             st.rerun()
 
         except Exception as e:
