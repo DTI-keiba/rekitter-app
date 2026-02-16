@@ -108,13 +108,18 @@ with st.sidebar:
         if st.button("🤖 AIが自動作成"):
             with st.spinner("AIが考案中..."):
                 if selected_id == "citizen":
-                    role_inst = "あなたは当時の庶民です。一言感想を述べてください。"
+                    role_inst = "16世紀の庶民。歴史の解説ではなく、今起きてることに驚く野次馬になりきれ。"
                 else:
                     char = characters_data[selected_id]
-                    role_inst = f"あなたは{char.get('name')}です。{char.get('description')} 絶対に妥協しないでください。"
+                    # 各キャラになりきるための個別性格付け
+                    if 'luther' in selected_id.lower():
+                        role_inst = "マルティン・ルター。カトリックの腐敗を激しく攻撃せよ。信仰のみを強調せよ。"
+                    elif 'leo' in selected_id.lower():
+                        role_inst = "教皇レオ10世。教会の絶対権威。ルターを異端として見下せ。"
+                    else:
+                        role_inst = f"{char.get('name')}。{char.get('description')}"
                 
-                # 自動作成時もメタ発言を禁止
-                prompt = f"【厳格なロールプレイ指示】あなたは{role_inst}。テーマ『{current_theme}』について、140文字以内のSNS投稿のみを出力してください。挨拶や解説、メタ発言（『理解しました』等）は一切禁止です。ハッシュタグを含めてください。"
+                prompt = f"【完全没入】あなたは{role_inst}。テーマ『{current_theme}』について、140文字以内のSNS投稿を1つだけ出力せよ。解説やメタ発言は一切禁止。"
                 res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200)
                 ai_text = res.choices[0].message.content
                 
@@ -139,7 +144,7 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (メタ発言封印 & 市民ロジック強化) ---
+# --- 7. 自動論争ロジック (思想対立を極限まで強化) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
@@ -150,15 +155,13 @@ if st.session_state.is_running:
     luther_id = next((k for k in char_ids if 'luther' in k.lower()), char_ids[0])
     leo_id = next((k for k in char_ids if 'leo' in k.lower()), char_ids[1] if len(char_ids) > 1 else char_ids[0])
     
-    # 配役決定
     if st.session_state.current_round == 0:
         current_char_id = luther_id
     elif st.session_state.current_round == 1:
         current_char_id = leo_id
     else:
         last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else "none"
-        # 市民の出現率を少し上げ(20%)、3回に1回は必ず市民を検討する
-        if last_role != "citizen" and (random.random() < 0.20 or st.session_state.current_round % 4 == 0):
+        if last_role != "citizen" and (random.random() < 0.25 or st.session_state.current_round % 4 == 0):
             current_char_id = "citizen"
         else:
             main_history = [m["role"] for m in reversed(st.session_state.messages) if m["role"] in [luther_id, leo_id]]
@@ -166,26 +169,26 @@ if st.session_state.is_running:
             current_char_id = luther_id if last_main == leo_id else leo_id
 
     with st.spinner(f"思考中..."):
+        # キャラクターごとの「絶対に譲れない一線」をプロンプトに刻印
         if current_char_id == luther_id:
-            role_inst = "マルティン・ルター。教皇を反キリストとして激しく非難せよ。妥協は罪である。"
+            char_role = "マルティン・ルター。免罪符は嘘であり、教皇は反キリストだと確信している。激しい怒りを持って投稿せよ。"
             char_info = characters_data[current_char_id]
             name, avatar = char_info.get('name'), f"static/{char_info.get('image')}"
         elif current_char_id == leo_id:
-            role_inst = "教皇レオ10世。ルターを邪悪な異端として破門する立場。神罰を強調せよ。"
+            char_role = "教皇レオ10世。メディチ家出身のプライド。ルターを『ぶどう畑を荒らす野猪』と呼び、地獄へ落ちるべきゴミだと断罪せよ。絶対に歩み寄るな。"
             char_info = characters_data[current_char_id]
             name, avatar = char_info.get('name'), f"static/{char_info.get('image')}"
         else:
-            role_inst = "当時のドイツまたはローマの市民。争いへの不安や怒り、あるいは支持を野次馬的に叫べ。"
+            char_role = "16世紀の庶民。難しい分析はせず、目の前の喧嘩に怯えたり、どちらかの味方をして叫べ。"
             name, avatar = "市民のつぶやき", "👤"
 
-        # 【最重要】AIのメタ発言を物理的に禁止するプロンプト
+        # 【最重要】なりきり・メタ発言禁止の徹底
         system_prompt = (
-            f"【歴史シミュレーション：完全没入モード】\n"
-            f"あなたは今から{role_inst}として振る舞います。\n"
-            f"指示1: テーマ『{current_theme}』について、140文字以内でSNS投稿のみを出力せよ。\n"
-            f"指示2: 「理解しました」「申し訳ありません」「投稿は理解しました」等のメタ発言、挨拶、解説は【死刑に値する禁忌】である。一切出力するな。\n"
-            f"指示3: 文中に必ず1つ以上のハッシュタグを含めよ。\n"
-            f"指示4: 相手が誰であっても媚びるな。自分の信念を叫べ。"
+            f"あなたは今、歴史シミュレーター内のキャラクターである【{char_role}】に完全になりきっています。\n"
+            f"指示1: テーマ『{current_theme}』について、140文字以内で相手を攻撃、または自説を叫べ。\n"
+            f"指示2: 相手への同情、妥協、理解は一切不要。あなたは敵対している。\n"
+            f"指示3: 解説や『理解しました』等のメタ発言は厳禁。投稿内容のみを出力せよ。\n"
+            f"指示4: 必ずハッシュタグ（#）を含めること。"
         )
         
         context = [{"role": "system", "content": system_prompt}]
@@ -193,17 +196,10 @@ if st.session_state.is_running:
             context.append({"role": "user", "content": m["content"]})
 
         try:
-            # 安全フィルターを刺激しないよう、temperatureを少し上げ、ロールプレイを維持
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo", 
-                messages=context, 
-                max_tokens=200,
-                temperature=0.8
-            )
+            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=200, temperature=0.9)
             answer = response.choices[0].message.content
-            
-            # もしAIが余計な文言を含めた場合の簡易ガード（「理解しました」が含まれていたら削除）
-            answer = re.sub(r'^(理解しました|申し訳ありません|そのSNS投稿は理解しました).*?\n?', '', answer).strip()
+            # 万が一のメタ発言除去
+            answer = re.sub(r'^(理解しました|申し訳ありません|投稿は理解).*?\n?', '', answer).strip()
             
             st.session_state.messages.append({"role": current_char_id, "name": name, "content": answer, "avatar": avatar})
             st.session_state.current_round += 1
