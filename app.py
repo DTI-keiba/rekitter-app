@@ -28,30 +28,29 @@ def load_characters():
 
 characters_data = load_characters()
 
-# --- 安全なアバター取得関数 (大文字小文字の自動吸収機能を追加) ---
+# --- 安全なアバター取得関数 ---
 def get_safe_avatar(char_key):
-    """画像ファイルが存在すればパスを返す。大文字小文字のブレも吸収する。"""
+    """画像ファイルが存在すればパスを、なければ役職に応じた絵文字を返す。大文字小文字対応。"""
     if char_key == "citizen":
         return "👤"
     
     if char_key in characters_data:
         char = characters_data[char_key]
-        image_name = char.get('image') # JSON上の名前 (例: french_noble.jpg)
+        image_name = char.get('image')
         
         if image_name:
-            # パターン1: そのまま探す
+            # そのまま探す
             path1 = f"static/{image_name}"
             if os.path.exists(path1):
                 return path1
             
-            # パターン2: 先頭を大文字にして探す (french... -> French...)
-            # 勝手に大文字になってしまう現象への対策
+            # 先頭大文字で探す (french... -> French...)
             capitalized_name = image_name[0].upper() + image_name[1:]
             path2 = f"static/{capitalized_name}"
             if os.path.exists(path2):
                 return path2
-
-    # 画像が見つからない場合のフォールバック絵文字
+    
+    # フォールバック絵文字
     if 'louis' in char_key.lower(): return "👑"
     if 'leo' in char_key.lower(): return "🇻🇦"
     if 'luther' in char_key.lower(): return "✝️"
@@ -178,7 +177,8 @@ with st.sidebar:
                         elif "フロンド" in current_theme: role_inst = "マザラン枢機卿。フロンド派の貴族を冷徹に計算して抑え込む。"
                         else: role_inst = "王の側近。王の命令を冷徹に実行する。"
                     elif 'french_noble' in selected_id.lower() or ('noble' in selected_id.lower() and 'german' not in selected_id.lower()):
-                        if "三部会" in current_theme: role_inst = "1614年の帯剣貴族。成金や平民を見下し、古来の特権維持を叫ぶ。"
+                        # フランス貴族のAI作成ロジック
+                        if "三部会" in current_theme: role_inst = "1614年の帯剣貴族（名門）。第三身分（平民や法服貴族）が貴族を『弟』と呼んだことに激怒し、『靴屋の息子と兄弟になった覚えはない』と吐き捨てろ。王権におもねるのではなく、『我々の剣こそが国を支えている』という誇りを持ち、金で官職を買った者たちを見下せ。"
                         elif "フロンド" in current_theme: role_inst = "フロンド派の貴族。『王はマザランに騙されている』と主張し、武力で権力を取り戻そうとする。"
                         else: role_inst = "ヴェルサイユの廷臣。王にへつらい、ご機嫌取りをする太鼓持ちになれ。"
                     elif 'german_noble' in selected_id.lower():
@@ -222,7 +222,6 @@ def display_messages():
         for msg in reversed(st.session_state.messages):
             role = msg["role"]
             avatar_path = msg["avatar"]
-            # 画像パスが存在しない場合、安全なアバターに置き換え
             if avatar_path and avatar_path.startswith("static/") and not os.path.exists(avatar_path):
                 avatar_path = get_safe_avatar(role)
 
@@ -240,7 +239,9 @@ if st.session_state.is_running:
     char_ids = list(characters_data.keys())
     
     german_noble_id = next((k for k in char_ids if 'german' in k.lower()), None)
+    # 修正済み: french_noble_id
     french_noble_id = next((k for k in char_ids if ('french' in k.lower() or 'fronde' in k.lower()) or ('noble' in k.lower() and 'german' not in k.lower())), None)
+    
     louis_id = next((k for k in char_ids if 'louis' in k.lower()), None)
     minister_id = next((k for k in char_ids if 'minister' in k.lower()), None)
     huguenot_id = next((k for k in char_ids if 'huguenot' in k.lower()), None)
@@ -302,9 +303,13 @@ if st.session_state.is_running:
 
         elif current_char_id == french_noble_id:
             char = characters_data[current_char_id]
-            if "三部会" in current_theme: role_inst = f"1614年の帯剣貴族。『平民風情が生意気だ』と第三身分を見下し、古来の特権こそが正義だと主張せよ。"
-            elif "フロンド" in current_theme: role_inst = f"フロンド派の大貴族。『マザランごとき外国人が国を牛耳るとは！』と激怒し、王を取り戻すために戦う。"
-            else: role_inst = f"ヴェルサイユの廷臣。王にへつらい、ご機嫌取りをする太鼓持ちになれ。"
+            if "三部会" in current_theme:
+                # 【ここを歴史的に100%正確に修正】
+                role_inst = f"1614年の帯剣貴族（名門）。第三身分（平民や法服貴族）が貴族を『弟』と呼んだことに激怒せよ。『靴屋の息子と兄弟になった覚えはない！』と吐き捨て、我々の剣こそが国を支えているという強烈な選民意識を示せ。金で官職を買った者たちを見下せ。"
+            elif "フロンド" in current_theme:
+                role_inst = f"フロンド派の大貴族。『マザランごとき外国人が国を牛耳るとは！』と激怒し、王を取り戻すために戦う。"
+            else: 
+                role_inst = f"ヴェルサイユの廷臣。王にへつらい、ご機嫌取りをする太鼓持ちになれ。"
 
         elif current_char_id == german_noble_id:
             char = characters_data[current_char_id]
