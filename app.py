@@ -184,7 +184,6 @@ with st.sidebar:
                         if "三部会" in current_theme: role_inst = "13歳のルイ13世。『貴族どもは特権ばかり主張して文句が多く、本当にうざい』。三部会など時間の無駄であり、『そもそもこんなもの開かなくても、余と母上がいれば政治は回るのだ』と、議会不要論を不機嫌につぶやけ。"
                         elif "フロンド" in current_theme: role_inst = "ルイ14世（少年期）。パリを追われた屈辱を忘れず、王権への反逆を心に刻む。"
                         elif "ナント" in current_theme: 
-                            # 【修正】ルイ14世の反応ロジック
                             role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが国を捨てて亡命していくことに『信仰のために国を捨てるだと？』と驚愕せよ。最初は強気だが、徐々に『働き手がいなくなるのでは？』と経済への不安を滲ませる流れを作れ。"
                         else: role_inst = "ルイ14世（太陽王）。『朕は国家なり』。異端を許さず、フランスの統一を完成させる絶対君主。"
                     elif 'minister' in selected_id.lower():
@@ -199,7 +198,6 @@ with st.sidebar:
                         role_inst = "ドイツ諸侯。ローマへの送金を嫌い、ルターを利用して政治的自立を狙う。"
                     elif 'huguenot' in selected_id.lower():
                         if "ナント" in current_theme:
-                            # 【修正】ユグノーのロジック：経済ではなく「信仰と亡命」に集中
                             role_inst = "1685年のユグノー（商工業者）。経済的損失についてはまだ触れるな。今は『強制的なカトリックへの改宗（ドラゴナード）』への恐怖と拒絶を叫べ。『魂を売るくらいなら、愛するフランスを捨てて亡命する』という悲壮な決意を投稿せよ。"
                         else:
                             role_inst = "ユグノー。信仰の自由を奪われ、亡命か改宗かの選択を迫られている。"
@@ -211,7 +209,6 @@ with st.sidebar:
                         char = characters_data[selected_id]
                         role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}"
                 
-                # メタ発言・エラー発言を誘発しないシンプルな命令形式に変更
                 prompt = (
                     f"役割: {role_inst}\n"
                     f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
@@ -220,7 +217,7 @@ with st.sidebar:
                 
                 res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200, temperature=1.0)
                 ai_text = res.choices[0].message.content
-                clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー|回答は無効|この投稿は).*?\n?', '', ai_text).strip()
+                clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー).*?\n?', '', ai_text).strip()
 
                 name = "市民" if selected_id == "citizen" else characters_data[selected_id].get('name')
                 
@@ -282,7 +279,6 @@ if st.session_state.is_running:
         elif "フロンド" in current_theme:
             candidates = [c for c in [louis_id, minister_id, french_noble_id] if c]
         elif "ナント" in current_theme:
-            # ナントの勅令廃止では、ルイ14世とユグノーのみ
             candidates = [c for c in [louis_id, huguenot_id] if c]
         elif luther_id and leo_id: 
             candidates = [c for c in [luther_id, leo_id, german_noble_id] if c]
@@ -359,11 +355,11 @@ if st.session_state.is_running:
             char = characters_data[current_char_id]
             role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 自説を主張せよ。"
 
-        # 【修正】エラーコードやメタ発言を根絶するシンプルな命令
+        # 【修正】stopパラメータを厳選して4つ以内に
         system_prompt = (
             f"役割: {role_inst}\n"
             f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
-            "絶対ルール: 挨拶・解説・メタ発言（『不合格です』『理解しました』等）は一切禁止。投稿本文のみを直接出力せよ。ハッシュタグ（#）必須。"
+            "絶対ルール: 挨拶・解説・メタ発言（『不合格です』等）は一切禁止。投稿本文のみを直接出力せよ。ハッシュタグ（#）必須。"
         )
         
         context = [{"role": "system", "content": system_prompt}]
@@ -371,8 +367,8 @@ if st.session_state.is_running:
             context.append({"role": "user", "content": f"{m['name']}: {m['content']}"})
 
         try:
-            # stopワードを調整し、メタ発言を確実にカット
-            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=1.0, stop=["不合格", "理解しました", "申し訳", "システム上のエラー", "この投稿は"])
+            # 配列を4つに修正
+            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=1.0, stop=["不合格", "理解しました", "申し訳", "システム上のエラー"])
             ai_text = res.choices[0].message.content
             
             clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー|回答は無効|この投稿は).*?\n?', '', ai_text).strip()
