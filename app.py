@@ -176,13 +176,16 @@ with st.sidebar:
                 if selected_id == "citizen":
                     if "三部会" in current_theme: role_inst = "【重要：あなたは貧しい市民です。王や貴族ではありません】1614年の第三身分。貴族の横暴と重税に苦しみ、王に救済を求める陳情者。"
                     elif "フロンド" in current_theme: role_inst = "【重要：あなたは貧しい市民です】1648年のパリ市民。重税を課すマザラン枢機卿への憎悪を燃やし、バリケードを築く暴徒。"
-                    elif "ナント" in current_theme: role_inst = "【重要：あなたは市民です】1685年のカトリック市民。異端追放を歓迎するか、経済の混乱を憂う者。"
+                    elif "ナント" in current_theme: role_inst = "【重要：あなたは市民です】1685年の市民。異端追放を歓迎するか、経済の混乱を憂う者。"
                     elif "宗教改革" in current_theme: role_inst = "【重要：あなたは市民です】16世紀ドイツの市民。免罪符が高すぎると嘆く。"
                     else: role_inst = "名もなき市民。野次馬。"
                 else:
                     if 'louis' in selected_id.lower():
                         if "三部会" in current_theme: role_inst = "13歳のルイ13世。『貴族どもは特権ばかり主張して文句が多く、本当にうざい』。三部会など時間の無駄であり、『そもそもこんなもの開かなくても、余と母上がいれば政治は回るのだ』と、議会不要論を不機嫌につぶやけ。"
                         elif "フロンド" in current_theme: role_inst = "ルイ14世（少年期）。パリを追われた屈辱を忘れず、王権への反逆を心に刻む。"
+                        elif "ナント" in current_theme: 
+                            # 【修正】ルイ14世の反応ロジック
+                            role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが国を捨てて亡命していくことに『信仰のために国を捨てるだと？』と驚愕せよ。最初は強気だが、徐々に『働き手がいなくなるのでは？』と経済への不安を滲ませる流れを作れ。"
                         else: role_inst = "ルイ14世（太陽王）。『朕は国家なり』。異端を許さず、フランスの統一を完成させる絶対君主。"
                     elif 'minister' in selected_id.lower():
                         if "三部会" in current_theme: role_inst = "リシュリュー（若き司教）。第三身分を利用して貴族を牽制する。"
@@ -195,7 +198,11 @@ with st.sidebar:
                     elif 'german_noble' in selected_id.lower():
                         role_inst = "ドイツ諸侯。ローマへの送金を嫌い、ルターを利用して政治的自立を狙う。"
                     elif 'huguenot' in selected_id.lower():
-                        role_inst = "ユグノー。信仰の自由を奪われ、亡命か改宗かの選択を迫られている。"
+                        if "ナント" in current_theme:
+                            # 【修正】ユグノーのロジック：経済ではなく「信仰と亡命」に集中
+                            role_inst = "1685年のユグノー（商工業者）。経済的損失についてはまだ触れるな。今は『強制的なカトリックへの改宗（ドラゴナード）』への恐怖と拒絶を叫べ。『魂を売るくらいなら、愛するフランスを捨てて亡命する』という悲壮な決意を投稿せよ。"
+                        else:
+                            role_inst = "ユグノー。信仰の自由を奪われ、亡命か改宗かの選択を迫られている。"
                     elif 'luther' in selected_id.lower():
                         role_inst = "マルティン・ルター。カトリックの腐敗を許さない改革者。"
                     elif 'leo' in selected_id.lower():
@@ -204,16 +211,16 @@ with st.sidebar:
                         char = characters_data[selected_id]
                         role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}"
                 
-                # メタ発言禁止
+                # メタ発言・エラー発言を誘発しないシンプルな命令形式に変更
                 prompt = (
                     f"役割: {role_inst}\n"
                     f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
-                    "絶対ルール: 挨拶・解説・メタ発言（『不合格です』『理解しました』等）は一切禁止。投稿本文のみ出力せよ。ハッシュタグ（#）必須。"
+                    "絶対ルール: 挨拶・解説・メタ発言（『不合格です』等）は一切禁止。投稿本文のみを直接出力せよ。ハッシュタグ（#）必須。"
                 )
                 
                 res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200, temperature=1.0)
                 ai_text = res.choices[0].message.content
-                clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー).*?\n?', '', ai_text).strip()
+                clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー|回答は無効|この投稿は).*?\n?', '', ai_text).strip()
 
                 name = "市民" if selected_id == "citizen" else characters_data[selected_id].get('name')
                 
@@ -238,6 +245,7 @@ def display_messages():
         for msg in reversed(st.session_state.messages):
             role = msg["role"]
             avatar_path = msg["avatar"]
+            # 画像パスが存在しない場合、安全なアバターに置き換え
             if avatar_path and avatar_path.startswith("static/") and not os.path.exists(avatar_path):
                 avatar_path = get_safe_avatar(role)
 
@@ -274,7 +282,7 @@ if st.session_state.is_running:
         elif "フロンド" in current_theme:
             candidates = [c for c in [louis_id, minister_id, french_noble_id] if c]
         elif "ナント" in current_theme:
-            # 【修正箇所】ナントの勅令廃止では、ルイ14世とユグノーのみ（宰相と貴族を除外）
+            # ナントの勅令廃止では、ルイ14世とユグノーのみ
             candidates = [c for c in [louis_id, huguenot_id] if c]
         elif luther_id and leo_id: 
             candidates = [c for c in [luther_id, leo_id, german_noble_id] if c]
@@ -310,6 +318,9 @@ if st.session_state.is_running:
                 role_inst = f"13歳のルイ13世。『貴族どもは特権ばかり主張して文句が多く、本当にうざい』。三部会など時間の無駄であり、『そもそもこんなもの開かなくても、余と母上がいれば政治は回るのだ』と、不機嫌に断言せよ。"
             elif "フロンド" in current_theme:
                 role_inst = f"少年ルイ14世。パリの民衆に寝室まで侵入された屈辱。『王である余に対して、この無礼は何だ』と震える怒りを表現せよ。"
+            elif "ナント" in current_theme:
+                # 【修正】ルイ14世の反応ロジック
+                role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが国を捨てて亡命していくことに『信仰のために国を捨てるだと？』と驚愕せよ。最初は強気だが、徐々に『働き手がいなくなるのでは？』と経済への不安を滲ませる流れを作れ。"
             else: 
                 role_inst = f"絶頂期のルイ14世。『朕は国家なり』。異端を許さず、フランスの統一を完成させる絶対君主。"
 
@@ -331,7 +342,11 @@ if st.session_state.is_running:
 
         elif current_char_id == huguenot_id:
             char = characters_data[current_char_id]
-            role_inst = f"ユグノーの商工業者。『国のために尽くしてきたのに、なぜ追い出されねばならないのか』。経済的損失を警告せよ。"
+            if "ナント" in current_theme:
+                # 【修正】ユグノーのロジック：経済ではなく「信仰と亡命」に集中
+                role_inst = "1685年のユグノー（商工業者）。経済的損失についてはまだ触れるな。今は『強制的なカトリックへの改宗（ドラゴナード）』への恐怖と拒絶を叫べ。『魂を売るくらいなら、愛するフランスを捨てて亡命する』という悲壮な決意を投稿せよ。"
+            else:
+                role_inst = f"ユグノーの商工業者。『国のために尽くしてきたのに、なぜ追い出されねばならないのか』。経済的損失を警告せよ。"
 
         elif current_char_id == luther_id:
             char = characters_data[current_char_id]
@@ -344,13 +359,11 @@ if st.session_state.is_running:
             char = characters_data[current_char_id]
             role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 自説を主張せよ。"
 
+        # 【修正】エラーコードやメタ発言を根絶するシンプルな命令
         system_prompt = (
-            f"### 命令: あなたは今から【{role_inst}】そのものとして振る舞い、テーマ『{current_theme}』についてSNS投稿を行います。\n"
-            "### 制約:\n"
-            "1. 140文字以内の【投稿内容のみ】を出力せよ。\n"
-            "2. 前置き、解説、相槌（『理解しました』『ありがとうございます』『不合格です』等）、AIとしてのメタ発言は一切禁止する。\n"
-            "3. なりきりを貫き、相手の意見に安易に同調しないこと。\n"
-            "4. ハッシュタグ（#）を含めよ。"
+            f"役割: {role_inst}\n"
+            f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
+            "絶対ルール: 挨拶・解説・メタ発言（『不合格です』『理解しました』等）は一切禁止。投稿本文のみを直接出力せよ。ハッシュタグ（#）必須。"
         )
         
         context = [{"role": "system", "content": system_prompt}]
@@ -358,15 +371,16 @@ if st.session_state.is_running:
             context.append({"role": "user", "content": f"{m['name']}: {m['content']}"})
 
         try:
-            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=0.9, stop=["不合格", "理解しました", "申し訳", "システム上のエラー"])
-            answer = response.choices[0].message.content
+            # stopワードを調整し、メタ発言を確実にカット
+            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=1.0, stop=["不合格", "理解しました", "申し訳", "システム上のエラー", "この投稿は"])
+            ai_text = res.choices[0].message.content
             
-            clean_answer = re.sub(r'^(不合格です|理解しました|申し訳ありません|そのSNS投稿は|あなたの感情が|このキャラクターでの|システム上のエラー).*?\n?', '', answer).strip()
+            clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー|回答は無効|この投稿は).*?\n?', '', ai_text).strip()
             
             avatar = get_safe_avatar(current_char_id)
 
-            if clean_answer:
-                st.session_state.messages.append({"role": current_char_id, "name": name, "content": clean_answer, "avatar": avatar})
+            if clean_text:
+                st.session_state.messages.append({"role": current_char_id, "name": name, "content": clean_text, "avatar": avatar})
                 st.session_state.current_round += 1
                 display_messages()
                 time.sleep(4) 
