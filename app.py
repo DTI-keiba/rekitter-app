@@ -28,22 +28,30 @@ def load_characters():
 
 characters_data = load_characters()
 
-# --- 安全なアバター取得関数 ---
+# --- 安全なアバター取得関数 (大文字小文字の自動吸収機能を追加) ---
 def get_safe_avatar(char_key):
-    """画像ファイルが存在すればパスを、なければ役職に応じた絵文字を返す"""
+    """画像ファイルが存在すればパスを返す。大文字小文字のブレも吸収する。"""
     if char_key == "citizen":
         return "👤"
     
     if char_key in characters_data:
         char = characters_data[char_key]
-        image_name = char.get('image')
+        image_name = char.get('image') # JSON上の名前 (例: french_noble.jpg)
         
         if image_name:
-            image_path = f"static/{image_name}"
-            if os.path.exists(image_path):
-                return image_path
-    
-    # フォールバック絵文字
+            # パターン1: そのまま探す
+            path1 = f"static/{image_name}"
+            if os.path.exists(path1):
+                return path1
+            
+            # パターン2: 先頭を大文字にして探す (french... -> French...)
+            # 勝手に大文字になってしまう現象への対策
+            capitalized_name = image_name[0].upper() + image_name[1:]
+            path2 = f"static/{capitalized_name}"
+            if os.path.exists(path2):
+                return path2
+
+    # 画像が見つからない場合のフォールバック絵文字
     if 'louis' in char_key.lower(): return "👑"
     if 'leo' in char_key.lower(): return "🇻🇦"
     if 'luther' in char_key.lower(): return "✝️"
@@ -57,7 +65,6 @@ def get_safe_avatar(char_key):
 def get_dynamic_king_name(base_name, current_theme):
     if "三部会" in current_theme:
         return "ルイ13世"
-    # フロンド、ナント、その他はルイ14世
     return "ルイ14世"
 
 # --- 3. 画面設定 & ハッシュタグ青色化CSS (維持) ---
@@ -143,7 +150,6 @@ with st.sidebar:
                     name = "市民"
                 else:
                     char_data = characters_data[selected_id]
-                    # ここで国王の名前を動的に変換
                     if 'louis' in selected_id.lower():
                         name = get_dynamic_king_name(char_data.get('name'), current_theme)
                     else:
@@ -171,11 +177,11 @@ with st.sidebar:
                         if "三部会" in current_theme: role_inst = "リシュリュー（若き司教）。第三身分を利用して貴族を牽制する。"
                         elif "フロンド" in current_theme: role_inst = "マザラン枢機卿。フロンド派の貴族を冷徹に計算して抑え込む。"
                         else: role_inst = "王の側近。王の命令を冷徹に実行する。"
-                    elif 'French_noble' in selected_id.lower() or ('noble' in selected_id.lower() and 'german' not in selected_id.lower()):
+                    elif 'french_noble' in selected_id.lower() or ('noble' in selected_id.lower() and 'german' not in selected_id.lower()):
                         if "三部会" in current_theme: role_inst = "1614年の帯剣貴族。成金や平民を見下し、古来の特権維持を叫ぶ。"
                         elif "フロンド" in current_theme: role_inst = "フロンド派の貴族。『王はマザランに騙されている』と主張し、武力で権力を取り戻そうとする。"
-                        else: role_inst = "ヴェルサイユの廷臣。王にへつらう太鼓持ち。"
-                    elif 'German_noble' in selected_id.lower():
+                        else: role_inst = "ヴェルサイユの廷臣。王にへつらい、ご機嫌取りをする太鼓持ちになれ。"
+                    elif 'german_noble' in selected_id.lower():
                         role_inst = "ドイツ諸侯。ローマへの送金を嫌い、ルターを利用して政治的自立を狙う。"
                     elif 'huguenot' in selected_id.lower():
                         role_inst = "ユグノー。信仰の自由を奪われ、亡命か改宗かの選択を迫られている。"
@@ -197,15 +203,9 @@ with st.sidebar:
                 ai_text = res.choices[0].message.content
                 clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません).*?\n?', '', ai_text).strip()
 
-                # 名前決定ロジック
-                if selected_id == "citizen":
-                    name = "市民"
-                else:
-                    char_data = characters_data[selected_id]
-                    if 'louis' in selected_id.lower():
-                        name = get_dynamic_king_name(char_data.get('name'), current_theme)
-                    else:
-                        name = char_data.get('name')
+                name = "市民" if selected_id == "citizen" else characters_data[selected_id].get('name')
+                if 'louis' in selected_id.lower() and selected_id != "citizen":
+                     name = get_dynamic_king_name(characters_data[selected_id].get('name'), current_theme)
 
                 avatar = get_safe_avatar(selected_id)
 
@@ -222,7 +222,7 @@ def display_messages():
         for msg in reversed(st.session_state.messages):
             role = msg["role"]
             avatar_path = msg["avatar"]
-            # アバター再確認
+            # 画像パスが存在しない場合、安全なアバターに置き換え
             if avatar_path and avatar_path.startswith("static/") and not os.path.exists(avatar_path):
                 avatar_path = get_safe_avatar(role)
 
@@ -269,7 +269,7 @@ if st.session_state.is_running:
         current_char_id = random.choice(remaining) if remaining else random.choice(candidates)
 
     with st.spinner(f"思考中..."):
-        # --- 名前決定ロジック ---
+        # 名前決定
         if current_char_id == "citizen":
             name = "市民のつぶやき"
         elif 'louis' in current_char_id.lower():
@@ -277,7 +277,7 @@ if st.session_state.is_running:
         else:
             name = characters_data[current_char_id].get('name')
 
-        # --- 思考回路分岐 ---
+        # 思考回路分岐
         if current_char_id == "citizen":
             if "三部会" in current_theme: role_inst = "1614年の第三身分。貴族も聖職者も免税で、自分たちだけが重税を負わされる不条理に怒れ。"
             elif "フロンド" in current_theme: role_inst = "1648年のパリ市民。重税を課すマザラン枢機卿を罵り、高等法院を支持してバリケードを築け。"
@@ -300,13 +300,13 @@ if st.session_state.is_running:
             elif "フロンド" in current_theme: role_inst = f"マザラン枢機卿。貴族や民衆からの憎悪を一身に受けながら、冷徹に王家を守れ。"
             else: role_inst = f"王の側近。王の命令を冷徹に実行せよ。"
 
-        elif current_char_id == French_noble_id:
+        elif current_char_id == french_noble_id:
             char = characters_data[current_char_id]
             if "三部会" in current_theme: role_inst = f"1614年の帯剣貴族。『平民風情が生意気だ』と第三身分を見下し、古来の特権こそが正義だと主張せよ。"
             elif "フロンド" in current_theme: role_inst = f"フロンド派の大貴族。『マザランごとき外国人が国を牛耳るとは！』と激怒し、王を取り戻すために戦う。"
             else: role_inst = f"ヴェルサイユの廷臣。王にへつらい、ご機嫌取りをする太鼓持ちになれ。"
 
-        elif current_char_id == German_noble_id:
+        elif current_char_id == german_noble_id:
             char = characters_data[current_char_id]
             role_inst = f"ドイツ諸侯。『ローマ教会にドイツの富が吸い上げられるのは我慢ならん』。ルターを保護し、教皇と皇帝の干渉を排除して自立を狙え。"
 
