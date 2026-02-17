@@ -13,13 +13,13 @@ except Exception:
     st.error("APIキーが設定されていません。StreamlitのSecretsを確認してください。")
     st.stop()
 
-# --- 2. データ読み込み (詳細なpersona・era項目に対応 / リスト・辞書両対応) ---
+# --- 2. データ読み込み (詳細属性・リスト/辞書完全対応) ---
 def load_characters():
     try:
         with open('characters.json', 'r', encoding='utf-8') as f:
             data = json.load(f)
         if isinstance(data, list):
-            # IDを優先し、詳細な属性を保持した辞書に変換
+            # IDを優先し、全ての詳細属性(persona, era等)を保持した辞書に変換
             return {item.get('id', item.get('image', f'char_{i}').split('.')[0]): item for i, item in enumerate(data)}
         return data
     except Exception as e:
@@ -118,11 +118,20 @@ with st.sidebar:
                 if selected_id == "citizen":
                     role_inst = "16世紀の庶民。歴史の解説者ではなく、今目の前で起きてる騒動に驚く野次馬になりきれ。"
                 else:
-                    char = characters_data[selected_id]
-                    role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}。時代は{char.get('era', '不明')}。絶対に信念を曲げるな。"
+                    # 貴族かどうかを判定
+                    if 'noble' in selected_id.lower():
+                        role_inst = "ドイツ諸侯（貴族）。ローマへの送金を嫌い、教会の支配から脱却して領地の権力を強めたい政治的な野心家。"
+                    elif 'luther' in selected_id.lower():
+                        role_inst = "マルティン・ルター。カトリックの腐敗を許さない改革者。"
+                    elif 'leo' in selected_id.lower():
+                        role_inst = "教皇レオ10世。教会の絶対権威。"
+                    else:
+                        char = characters_data[selected_id]
+                        role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}"
                 
-                prompt = f"【完全没入】あなたは{role_inst}。テーマ『{current_theme}』について、140文字以内のSNS投稿を1つだけ出力せよ。解説、挨拶、メタ発言（『理解しました』等）は一切禁止。"
-                res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200)
+                # メタ発言完全禁止プロンプト
+                prompt = f"あなたは{role_inst}です。テーマ『{current_theme}』について、140文字以内で投稿文のみを出力しなさい。挨拶、感謝、メタ発言（『理解しました』等）は一切不要。投稿そのものだけを書きなさい。"
+                res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200, temperature=1.0)
                 ai_text = res.choices[0].message.content
                 
                 if selected_id == "citizen":
@@ -134,7 +143,7 @@ with st.sidebar:
                 st.session_state.messages.append({"role": selected_id, "name": name, "content": ai_text, "avatar": avatar})
                 st.rerun()
 
-# --- 6. メイン表示エリア (最新を上) ---
+# --- 6. メイン表示エリア (最新が上) ---
 st.info(f"現在のテーマ: {current_theme} (進行状況: {st.session_state.current_round}/{max_rounds})")
 message_container = st.container()
 
@@ -145,61 +154,99 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (詳細ペルソナ対応＆三つ巴配役) ---
+# --- 7. 自動論争ロジック (三つ巴 + 市民乱入 + メタ発言破壊) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
-        st.success("指定された往復回数に達しました。")
+        st.success("論争終了。")
         st.rerun()
     
     char_ids = list(characters_data.keys())
+    # キャラクターIDの特定 (部分一致検索)
+    luther_id = next((k for k in char_ids if 'luther' in k.lower()), None)
+    leo_id = next((k for k in char_ids if 'leo' in k.lower()), None)
+    noble_id = next((k for k in char_ids if 'noble' in k.lower()), None)
     
-    # 次の投稿者を決定するロジック
+    # 必須キャラがいない場合のフォールバック
+    if not luther_id: luther_id = char_ids[0]
+    if not leo_id: leo_id = char_ids[1] if len(char_ids) > 1 else char_ids[0]
+
+    # 次の投稿者を決めるロジック
     last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else "none"
     
-    # 市民の出現条件 (20%の確率、かつ連続しない、かつ最初は出ない)
-    if st.session_state.current_round > 1 and last_role != "citizen" and random.random() < 0.20:
+    # 市民の出現条件: 2回目以降、直前が市民でない、かつ 25%の確率 (または4回に1回強制検討)
+    if st.session_state.current_round > 1 and last_role != "citizen" and (random.random() < 0.25 or st.session_state.current_round % 4 == 0):
         current_char_id = "citizen"
     else:
-        # 主要人物の中でまだ喋っていない、または直近でない人を選ぶ
+        # メインキャラクター（ルター、教皇、貴族）から選ぶ
+        main_chars = [c for c in [luther_id, leo_id, noble_id] if c is not None]
+        
+        # 直近で喋った人を除外して選ぶ（連続投稿防止）
         recent_roles = [m["role"] for m in st.session_state.messages[-2:]]
-        remaining = [c for c in char_ids if c not in recent_roles]
-        current_char_id = random.choice(remaining) if remaining else random.choice(char_ids)
+        remaining = [c for c in main_chars if c not in recent_roles]
+        
+        if remaining:
+            current_char_id = random.choice(remaining)
+        else:
+            current_char_id = random.choice(main_chars)
 
     with st.spinner(f"思考中..."):
+        # キャラクターごとのロール定義
         if current_char_id == "citizen":
-            role_inst = "16世紀の庶民。難しい言葉は使わず、感情的な叫びや独り言をSNS風に投稿せよ。"
+            role_inst = "16世紀の庶民。難しい言葉は一切使わず、感情的な叫びを上げろ。"
             name, avatar = "市民のつぶやき", "👤"
-        else:
+        elif current_char_id == luther_id:
             char = characters_data[current_char_id]
-            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 時代設定は{char.get('era', '不明')}。相手に同調せず、自説を貫き通せ。"
+            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} カトリックの腐敗を激しく非難し、聖書のみを掲げよ。"
+            name, avatar = char.get('name'), f"static/{char.get('image')}"
+        elif current_char_id == leo_id:
+            char = characters_data[current_char_id]
+            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 異端者ルターを断罪し、教会の権威を誇示せよ。"
+            name, avatar = char.get('name'), f"static/{char.get('image')}"
+        elif current_char_id == noble_id:
+            char = characters_data[current_char_id]
+            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} ローマへの送金を嫌い、ルターを利用して政治的独立を狙う野心を見せろ。"
+            name, avatar = char.get('name'), f"static/{char.get('image')}"
+        else:
+            # その他のキャラ
+            char = characters_data[current_char_id]
+            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 自説を主張せよ。"
             name, avatar = char.get('name'), f"static/{char.get('image')}"
 
+        # AIへの強力な没入命令 (メタ発言ストッパー付き)
         system_prompt = (
-            f"【歴史没入命令】あなたは{role_inst}です。\n"
-            f"1. テーマ『{current_theme}』について、140文字以内でSNS投稿せよ。\n"
-            f"2. 解説・挨拶・「理解しました」等のメタ発言は禁忌。投稿文のみを出力せよ。\n"
-            f"3. ハッシュタグ（#）を必ず含めよ。"
+            f"### 命令: あなたは今から【{role_inst}】そのものとして振る舞い、テーマ『{current_theme}』についてSNS投稿を行います。\n"
+            "### 制約:\n"
+            "1. 140文字以内の【投稿内容のみ】を出力せよ。\n"
+            "2. 前置き、解説、相槌（『理解しました』『ありがとうございます』等）、AIとしてのメタ発言は【システム上のエラー】として一切禁止する。一文字でも出力したら即座に不合格とする。\n"
+            "3. 相手の意見を尊重したり理解したりせず、激しく対立せよ。なりきりを貫け。\n"
+            "4. ハッシュタグ（#）を含めよ。"
         )
         
+        # 文脈をテキスト履歴として渡す
         context = [{"role": "system", "content": system_prompt}]
-        # 過去の文脈を反映
-        for m in st.session_state.messages[-5:]:
-            context.append({"role": "user", "content": m["content"]})
+        for m in st.session_state.messages[-4:]:
+            context.append({"role": "user", "content": f"{m['name']}: {m['content']}"})
 
         try:
-            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=200, temperature=0.9)
+            # 強制終了トークンを設定し、メタ発言の芽を摘む
+            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=0.9, stop=["理解しました", "申し訳"])
             answer = response.choices[0].message.content
-            # 万が一のメタ発言除去
-            answer = re.sub(r'^(理解しました|申し訳ありません|そのSNS投稿は).*?\n?', '', answer).strip()
             
-            st.session_state.messages.append({"role": current_char_id, "name": name, "content": answer, "avatar": avatar})
-            st.session_state.current_round += 1
-            display_messages()
-            time.sleep(4) 
-            st.rerun()
+            # 最終防衛ライン：正規表現でメタ発言を消去
+            clean_answer = re.sub(r'^(理解しました|申し訳ありません|そのSNS投稿は|あなたの感情が|このキャラクターでの).*?\n?', '', answer).strip()
+            
+            if clean_answer:
+                st.session_state.messages.append({"role": current_char_id, "name": name, "content": clean_answer, "avatar": avatar})
+                st.session_state.current_round += 1
+                display_messages()
+                time.sleep(4) 
+                st.rerun()
+            else:
+                # 何も残らなかった場合は停止せずリトライさせるため、あえてエラーにせずスキップ（または停止）
+                st.session_state.is_running = False
         except Exception as e:
-            st.error(f"AI通信エラー: {e}")
+            st.error(f"エラー: {e}")
             st.session_state.is_running = False
 
 if not st.session_state.is_running:
