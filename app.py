@@ -19,7 +19,6 @@ def load_characters():
         with open('characters.json', 'r', encoding='utf-8') as f:
             data = json.load(f)
         if isinstance(data, list):
-            # IDを優先し、全ての詳細属性(persona, era等)を保持した辞書に変換
             return {item.get('id', item.get('image', f'char_{i}').split('.')[0]): item for i, item in enumerate(data)}
         return data
     except Exception as e:
@@ -39,7 +38,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 def format_content(text):
-    # ハッシュタグを青くし、改行を維持する
     formatted_text = re.sub(r'(#\w+)', r'<span class="hashtag">\1</span>', text)
     return formatted_text.replace('\n', '<br>')
 
@@ -57,13 +55,11 @@ if "current_round" not in st.session_state:
 with st.sidebar:
     st.header("🎮 操作パネル")
     
-    # 往復回数
     st.subheader("🔁 論争の長さ")
     max_rounds = st.number_input("往復回数（総投稿数）", min_value=1, max_value=50, value=10)
     
     st.divider()
     
-    # テーマ選択
     st.subheader("📢 論争テーマ")
     theme_options = ["宗教改革 (免罪符について)", "聖書の解釈", "現代のSNSについて", "自由テーマ"]
     selected_theme = st.selectbox("テーマ選択", theme_options)
@@ -104,33 +100,25 @@ with st.sidebar:
     with c_manual:
         if st.button("📤 手動で投稿"):
             if user_text:
-                if selected_id == "citizen":
-                    name, avatar = "市民", "👤"
-                else:
-                    char = characters_data[selected_id]
-                    name, avatar = char.get('name'), f"static/{char.get('image')}"
+                name, avatar = ("市民", "👤") if selected_id == "citizen" else (characters_data[selected_id].get('name'), f"static/{characters_data[selected_id].get('image')}")
                 st.session_state.messages.append({"role": selected_id, "name": name, "content": user_text, "avatar": avatar})
                 st.rerun()
 
     with c_auto:
         if st.button("🤖 AIが自動作成"):
             with st.spinner("AIが考案中..."):
-                # プロンプト作成ロジック
                 if selected_id == "citizen":
-                    role_inst = "16世紀の庶民。歴史の解説者ではなく、今目の前で起きてる騒動に驚く野次馬になりきれ。"
+                    role_inst = "16世紀のドイツの貧しい市民。免罪符が高くて生活が苦しいことへの不満や、地獄への恐怖を素朴な言葉で語れ。"
+                elif 'noble' in selected_id.lower():
+                    role_inst = "ドイツ諸侯（貴族）。ローマ教会に富を吸い上げられることに怒り、ルターを利用して政治的自立を目指す計算高い権力者。"
+                elif 'luther' in selected_id.lower():
+                    role_inst = "マルティン・ルター。『信仰のみ』『聖書のみ』を掲げ、教皇の権威を否定する情熱的な改革者。"
+                elif 'leo' in selected_id.lower():
+                    role_inst = "教皇レオ10世。神の代理人としての絶対的プライドを持ち、ルターを野蛮な異端者として見下す。"
                 else:
-                    # 貴族・ルター・教皇判定
-                    if 'noble' in selected_id.lower():
-                        role_inst = "ドイツ諸侯（貴族）。ローマへの送金を嫌い、教会の支配から脱却して領地の権力を強めたい政治的な野心家。"
-                    elif 'luther' in selected_id.lower():
-                        role_inst = "マルティン・ルター。カトリックの腐敗を許さない改革者。"
-                    elif 'leo' in selected_id.lower():
-                        role_inst = "教皇レオ10世。教会の絶対権威。"
-                    else:
-                        char = characters_data[selected_id]
-                        role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}"
+                    char = characters_data[selected_id]
+                    role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}"
                 
-                # 「不合格」を誘発する命令を削除し、純粋な出力命令のみにする
                 prompt = (
                     f"役割: {role_inst}\n"
                     f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
@@ -142,21 +130,14 @@ with st.sidebar:
                 
                 res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200, temperature=1.0)
                 ai_text = res.choices[0].message.content
-                
-                # 万が一の不合格メッセージ除去
                 clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません).*?\n?', '', ai_text).strip()
 
-                if selected_id == "citizen":
-                    name, avatar = "市民", "👤"
-                else:
-                    char = characters_data[selected_id]
-                    name, avatar = char.get('name'), f"static/{char.get('image')}"
-                
+                name, avatar = ("市民", "👤") if selected_id == "citizen" else (characters_data[selected_id].get('name'), f"static/{characters_data[selected_id].get('image')}")
                 if clean_text:
                     st.session_state.messages.append({"role": selected_id, "name": name, "content": clean_text, "avatar": avatar})
                     st.rerun()
 
-# --- 6. メイン表示エリア (最新が上) ---
+# --- 6. メイン表示エリア ---
 st.info(f"現在のテーマ: {current_theme} (進行状況: {st.session_state.current_round}/{max_rounds})")
 message_container = st.container()
 
@@ -167,7 +148,7 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (メタ発言・採点官モード完全封印) ---
+# --- 7. 自動論争ロジック (歴史的思考の完全実装) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
@@ -175,88 +156,97 @@ if st.session_state.is_running:
         st.rerun()
     
     char_ids = list(characters_data.keys())
-    # キャラクターIDの特定 (部分一致検索)
     luther_id = next((k for k in char_ids if 'luther' in k.lower()), None)
     leo_id = next((k for k in char_ids if 'leo' in k.lower()), None)
     noble_id = next((k for k in char_ids if 'noble' in k.lower()), None)
     
-    # 必須キャラがいない場合のフォールバック
     if not luther_id: luther_id = char_ids[0]
     if not leo_id: leo_id = char_ids[1] if len(char_ids) > 1 else char_ids[0]
 
-    # 次の投稿者を決めるロジック
     last_role = st.session_state.messages[-1]["role"] if st.session_state.messages else "none"
-    
-    # 市民の出現条件: 2回目以降、直前が市民でない、かつ 25%の確率 (または4回に1回強制検討)
     if st.session_state.current_round > 1 and last_role != "citizen" and (random.random() < 0.25 or st.session_state.current_round % 4 == 0):
         current_char_id = "citizen"
     else:
-        # メインキャラクター（ルター、教皇、貴族）から選ぶ
         main_chars = [c for c in [luther_id, leo_id, noble_id] if c is not None]
         recent_roles = [m["role"] for m in st.session_state.messages[-2:]]
         remaining = [c for c in main_chars if c not in recent_roles]
-        
-        if remaining:
-            current_char_id = random.choice(remaining)
-        else:
-            current_char_id = random.choice(main_chars)
+        current_char_id = random.choice(remaining) if remaining else random.choice(main_chars)
 
     with st.spinner(f"思考中..."):
-        # キャラクターごとのロール定義
+        # 【重要】ここが歴史的リサーチに基づく正確な思考回路の実装部分
         if current_char_id == "citizen":
-            role_inst = "16世紀の庶民。難しい言葉は一切使わず、感情的な叫びを上げろ。"
+            role_inst = (
+                "あなたは16世紀ドイツの貧しい市民です。神学的な難しい議論は分かりませんが、以下の感情を持っています。\n"
+                "1. 免罪符（贖宥状）が高すぎて生活が苦しい。\n"
+                "2. ローマの教皇は遠い存在だが、地獄には落ちたくない。\n"
+                "3. ルターの言う『信仰だけで救われる』という言葉に希望を感じつつも、教会に逆らう恐怖もある。\n"
+                "庶民の素朴な言葉遣いで、生活実感に基づいた不満や不安を叫んでください。"
+            )
             name, avatar = "市民のつぶやき", "👤"
         elif current_char_id == luther_id:
             char = characters_data[current_char_id]
-            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} カトリックの腐敗を激しく非難し、聖書のみを掲げよ。"
+            role_inst = (
+                f"あなたは{char.get('name')}です。以下の思想を徹底してください。\n"
+                "1. 『信仰のみ(Sola Fide)』：金銭で救いは買えない。\n"
+                "2. 『聖書のみ(Sola Scriptura)』：教皇や公会議の権威よりも聖書の言葉が上である。\n"
+                "3. 教皇は『反キリスト』であり、教会を金儲けの道具にしていると激しく糾弾する。\n"
+                "決して妥協せず、情熱的かつ攻撃的な神学者として振る舞ってください。"
+            )
             name, avatar = char.get('name'), f"static/{char.get('image')}"
         elif current_char_id == leo_id:
             char = characters_data[current_char_id]
-            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 異端者ルターを断罪し、教会の権威を誇示せよ。"
+            role_inst = (
+                f"あなたは{char.get('name')}です。以下の立場を崩さないでください。\n"
+                "1. 教皇はペテロの後継者であり、地上のキリストの代理人である（絶対的権威）。\n"
+                "2. サン・ピエトロ大聖堂の再建は神の栄光のためであり、その資金集め（免罪符）は正当な行為である。\n"
+                "3. ルターは『主のぶどう畑を荒らす野猪』であり、破門されるべき異端者である。\n"
+                "高圧的で優雅な口調で、反乱分子を見下してください。"
+            )
             name, avatar = char.get('name'), f"static/{char.get('image')}"
         elif current_char_id == noble_id:
             char = characters_data[current_char_id]
-            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} ローマへの送金を嫌い、ルターを利用して政治的独立を狙う野心を見せろ。"
+            role_inst = (
+                f"あなたは{char.get('name')}（ドイツ諸侯）です。信仰心よりも政治的利害を重視します。\n"
+                "1. ローマ教会にドイツの富が吸い上げられることに強い不満がある（グラヴァミナ）。\n"
+                "2. ルターを保護することで、皇帝や教皇の干渉を排除し、自領の権限を強化したい。\n"
+                "3. 『ドイツの自由』を掲げ、政治的な計算高さを見せてください。\n"
+                "教皇を批判しつつ、ルターを政治利用する立場をとってください。"
+            )
             name, avatar = char.get('name'), f"static/{char.get('image')}"
         else:
             char = characters_data[current_char_id]
             role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 自説を主張せよ。"
             name, avatar = char.get('name'), f"static/{char.get('image')}"
 
-        # AIへの命令プロンプト (採点・評価の要素を全削除し、純粋な出力命令に変更)
+        # メタ発言を物理的に封印するシステムプロンプト
         system_prompt = (
-            f"あなたは【{role_inst}】そのものです。テーマ『{current_theme}』についてSNS投稿を行ってください。\n"
-            "【重要】\n"
-            "1. 140文字以内の投稿内容のみを出力してください。\n"
-            "2. 「不合格です」「理解しました」「一文字以上です」といったAIのシステムメッセージは絶対に出力しないでください。\n"
-            "3. 相手の意見を尊重せず、激しく対立してください。\n"
-            "4. ハッシュタグ（#）を含めてください。"
+            f"### 命令: あなたは今から【{role_inst}】そのものとして振る舞い、テーマ『{current_theme}』についてSNS投稿を行います。\n"
+            "### 制約:\n"
+            "1. 140文字以内の【投稿内容のみ】を出力せよ。\n"
+            "2. 前置き、解説、相槌（『理解しました』『ありがとうございます』『不合格です』等）、AIとしてのメタ発言は【システム上のエラー】として一切禁止する。\n"
+            "3. なりきりを貫き、相手の意見に安易に同調しないこと。\n"
+            "4. ハッシュタグ（#）を含めよ。"
         )
         
-        # 文脈をテキスト履歴として渡す
         context = [{"role": "system", "content": system_prompt}]
         for m in st.session_state.messages[-4:]:
             context.append({"role": "user", "content": f"{m['name']}: {m['content']}"})
 
         try:
-            # stopパラメータで「不合格」が出そうになったら強制停止
             response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=0.9, stop=["不合格", "理解しました", "申し訳"])
             answer = response.choices[0].message.content
             
-            # Python側での最終検閲（ここが重要）
-            # もし「不合格」などの言葉が混ざっていたら、その投稿は「無かったこと」にしてスキップする
-            blacklist = ["不合格", "理解しました", "申し訳ありません", "一文字以上", "挑戦してください"]
-            if any(word in answer for word in blacklist):
-                # エラー投稿は追加しない (UIには何も出さず、次のループで再試行させる)
-                st.session_state.is_running = True 
-                st.rerun()
-            else:
-                st.session_state.messages.append({"role": current_char_id, "name": name, "content": answer, "avatar": avatar})
+            clean_answer = re.sub(r'^(不合格です|理解しました|申し訳ありません|そのSNS投稿は|あなたの感情が|このキャラクターでの).*?\n?', '', answer).strip()
+            
+            if clean_answer:
+                st.session_state.messages.append({"role": current_char_id, "name": name, "content": clean_answer, "avatar": avatar})
                 st.session_state.current_round += 1
                 display_messages()
                 time.sleep(4) 
                 st.rerun()
-
+            else:
+                st.session_state.is_running = True
+                st.rerun()
         except Exception as e:
             st.error(f"エラー: {e}")
             st.session_state.is_running = False
