@@ -215,9 +215,9 @@ with st.sidebar:
                     "絶対ルール: 挨拶・解説・メタ発言（『不合格です』等）は一切禁止。投稿本文のみを直接出力せよ。ハッシュタグ（#）必須。"
                 )
                 
-                res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200, temperature=1.0)
+                res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200, temperature=1.0, stop=["不合格", "理解しました", "申し訳", "システム上のエラー"])
                 ai_text = res.choices[0].message.content
-                clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー).*?\n?', '', ai_text).strip()
+                clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー|回答は無効|この投稿は).*?\n?', '', ai_text).strip()
 
                 name = "市民" if selected_id == "citizen" else characters_data[selected_id].get('name')
                 
@@ -315,7 +315,6 @@ if st.session_state.is_running:
             elif "フロンド" in current_theme:
                 role_inst = f"少年ルイ14世。パリの民衆に寝室まで侵入された屈辱。『王である余に対して、この無礼は何だ』と震える怒りを表現せよ。"
             elif "ナント" in current_theme:
-                # 【修正】ルイ14世の反応ロジック
                 role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが国を捨てて亡命していくことに『信仰のために国を捨てるだと？』と驚愕せよ。最初は強気だが、徐々に『働き手がいなくなるのでは？』と経済への不安を滲ませる流れを作れ。"
             else: 
                 role_inst = f"絶頂期のルイ14世。『朕は国家なり』。異端を許さず、フランスの統一を完成させる絶対君主。"
@@ -339,7 +338,6 @@ if st.session_state.is_running:
         elif current_char_id == huguenot_id:
             char = characters_data[current_char_id]
             if "ナント" in current_theme:
-                # 【修正】ユグノーのロジック：経済ではなく「信仰と亡命」に集中
                 role_inst = "1685年のユグノー（商工業者）。経済的損失についてはまだ触れるな。今は『強制的なカトリックへの改宗（ドラゴナード）』への恐怖と拒絶を叫べ。『魂を売るくらいなら、愛するフランスを捨てて亡命する』という悲壮な決意を投稿せよ。"
             else:
                 role_inst = f"ユグノーの商工業者。『国のために尽くしてきたのに、なぜ追い出されねばならないのか』。経済的損失を警告せよ。"
@@ -355,7 +353,6 @@ if st.session_state.is_running:
             char = characters_data[current_char_id]
             role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 自説を主張せよ。"
 
-        # 【修正】stopパラメータを厳選して4つ以内に
         system_prompt = (
             f"役割: {role_inst}\n"
             f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
@@ -367,9 +364,9 @@ if st.session_state.is_running:
             context.append({"role": "user", "content": f"{m['name']}: {m['content']}"})
 
         try:
-            # 配列を4つに修正
+            # 配列を4つに修正済み (正しい修正版)
             response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=1.0, stop=["不合格", "理解しました", "申し訳", "システム上のエラー"])
-            ai_text = res.choices[0].message.content
+            ai_text = response.choices[0].message.content
             
             clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー|回答は無効|この投稿は).*?\n?', '', ai_text).strip()
             
