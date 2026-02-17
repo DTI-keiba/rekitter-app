@@ -39,18 +39,14 @@ def get_safe_avatar(char_key):
         image_name = char.get('image')
         
         if image_name:
-            # パターン1: そのまま探す
             path1 = f"static/{image_name}"
             if os.path.exists(path1):
                 return path1
-            
-            # パターン2: 先頭を大文字にして探す (french... -> French...)
             capitalized_name = image_name[0].upper() + image_name[1:]
             path2 = f"static/{capitalized_name}"
             if os.path.exists(path2):
                 return path2
     
-    # フォールバック絵文字
     if 'louis' in char_key.lower(): return "👑"
     if 'leo' in char_key.lower(): return "🇻🇦"
     if 'luther' in char_key.lower(): return "✝️"
@@ -74,8 +70,8 @@ def get_dynamic_minister_name(base_name, current_theme):
         return "マザラン"
     return "王の側近"
 
-# --- 3. 画面設定 & ハッシュタグ青色化CSS (維持) ---
-st.set_page_config(page_title="歴ッター (Rekitter)", layout="wide")
+# --- 3. 画面設定 & ハッシュタグ青色化CSS ---
+st.set_page_config(page_title="もしツイ - もしも偉人がツイートしたら", layout="wide")
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 20px; font-weight: bold; }
@@ -88,7 +84,9 @@ def format_content(text):
     formatted_text = re.sub(r'(#\w+)', r'<span class="hashtag">\1</span>', text)
     return formatted_text.replace('\n', '<br>')
 
-st.title("📜 歴ッター (Rekitter)")
+# タイトル変更
+st.title("📱 もしツイ")
+st.subheader("〜もしも偉人がツイートしたら〜")
 
 # --- 4. セッション状態の初期化 ---
 if "messages" not in st.session_state:
@@ -100,10 +98,10 @@ if "current_round" not in st.session_state:
 
 # --- 5. サイドバー (全機能維持) ---
 with st.sidebar:
-    st.header("🎮 操作パネル")
+    st.header("⚙️ 設定パネル")
     
     st.subheader("🔁 論争の長さ")
-    max_rounds = st.number_input("往復回数（総投稿数）", min_value=1, max_value=50, value=10)
+    max_rounds = st.number_input("総ツイート数", min_value=1, max_value=50, value=10)
     
     st.divider()
     
@@ -122,14 +120,14 @@ with st.sidebar:
     st.divider()
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🚀 論争開始"):
+        if st.button("🚀 タイムライン開始"):
             st.session_state.is_running = True
             st.session_state.current_round = 0 
     with col2:
         if st.button("⏹️ 停止"):
             st.session_state.is_running = False
     
-    if st.button("🗑️ 履歴をリセット"):
+    if st.button("🗑️ 履歴を消去"):
         st.session_state.messages = []
         st.session_state.is_running = False
         st.session_state.current_round = 0
@@ -137,8 +135,7 @@ with st.sidebar:
 
     st.divider()
     
-    # 個別投稿機能 (AI自動・手動を維持)
-    st.header("✍️ 個別投稿")
+    st.header("✍️ ツイート作成")
     char_ids = list(characters_data.keys())
     post_char_ids = char_ids + ["citizen"]
     selected_id = st.selectbox(
@@ -151,13 +148,12 @@ with st.sidebar:
     
     c_auto, c_manual = st.columns(2)
     with c_manual:
-        if st.button("📤 手動で投稿"):
+        if st.button("📤 手動で送信"):
             if user_text:
                 if selected_id == "citizen":
                     name = "市民"
                 else:
                     char_data = characters_data[selected_id]
-                    # 名前の動的変更ロジック
                     if 'louis' in selected_id.lower():
                         name = get_dynamic_king_name(char_data.get('name'), current_theme)
                     elif 'minister' in selected_id.lower():
@@ -170,18 +166,18 @@ with st.sidebar:
                 st.rerun()
 
     with c_auto:
-        if st.button("🤖 AIが自動作成"):
-            with st.spinner("AIが考案中..."):
-                role_inst = "" # 初期化
+        if st.button("🤖 AIがツイート考案"):
+            with st.spinner("思考中..."):
+                role_inst = ""
                 if selected_id == "citizen":
                     if "三部会" in current_theme: role_inst = "【重要：あなたは貧しい市民です。王や貴族ではありません】1614年の第三身分。貴族の横暴と重税に苦しみ、王に救済を求める陳情者。"
                     elif "フロンド" in current_theme: role_inst = "【重要：あなたは貧しい市民です】1648年のパリ市民。重税を課すマザラン枢機卿への憎悪を燃やし、バリケードを築く暴徒。"
-                    elif "ナント" in current_theme: role_inst = "【重要：あなたは市民です】1685年の市民。異端追放を歓迎するか、経済の混乱を憂う者。"
+                    elif "ナント" in current_theme: role_inst = "【重要：あなたは市民です】1685年のカトリック市民。異端追放を歓迎するか、経済の混乱を憂う者。"
                     elif "宗教改革" in current_theme: role_inst = "【重要：あなたは市民です】16世紀ドイツの市民。免罪符が高すぎると嘆く。"
                     else: role_inst = "名もなき市民。野次馬。"
                 else:
                     if 'louis' in selected_id.lower():
-                        if "三部会" in current_theme: role_inst = "13歳のルイ13世。『貴族どもは特権ばかり主張して文句が多く、本当にうざい』。三部会など時間の無駄であり、『そもそもこんなもの開かなくても、余と母上がいれば政治は回るのだ』と、議会不要論を不機嫌につぶやけ。"
+                        if "三部会" in current_theme: role_inst = "13歳のルイ13世。『貴族どもは特権ばかり主張して文句が多く、本当にうざい』。三部会など時間の無駄であり、『そもそもこんなもの開かなくても、余と母上がいれば政治は回るのだ』と、不機嫌につぶやけ。"
                         elif "フロンド" in current_theme: role_inst = "ルイ14世（少年期）。パリを追われた屈辱を忘れず、王権への反逆を心に刻む。"
                         elif "ナント" in current_theme: 
                             role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが『信仰のために国を捨てる』と宣言したことに、『余の国よりも神を選ぶというのか？』と驚愕し、嘆け。そして『だが待てよ、彼らが出て行けば、フランスの富はどうなる？』と、経済崩壊の予感に震えろ。"
@@ -209,19 +205,17 @@ with st.sidebar:
                         char = characters_data[selected_id]
                         role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}"
                 
-                # メタ発言禁止
                 prompt = (
                     f"役割: {role_inst}\n"
                     f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
                     "絶対ルール: 挨拶・解説・メタ発言（『不合格です』等）は一切禁止。投稿本文のみを直接出力せよ。ハッシュタグ（#）必須。"
                 )
                 
-                res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200, temperature=1.0, stop=["不合格", "理解しました", "申し訳", "システムエラー"])
-                ai_text = res.choices[0].message.content
+                response = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200, temperature=1.0, stop=["不合格", "理解しました", "申し訳", "システムエラー"])
+                ai_text = response.choices[0].message.content
                 clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー|回答は無効|この投稿は).*?\n?', '', ai_text).strip()
 
                 name = "市民" if selected_id == "citizen" else characters_data[selected_id].get('name')
-                
                 if selected_id != "citizen":
                     if 'louis' in selected_id.lower():
                         name = get_dynamic_king_name(characters_data[selected_id].get('name'), current_theme)
@@ -243,7 +237,6 @@ def display_messages():
         for msg in reversed(st.session_state.messages):
             role = msg["role"]
             avatar_path = msg["avatar"]
-            # 画像パスが存在しない場合、安全なアバターに置き換え
             if avatar_path and avatar_path.startswith("static/") and not os.path.exists(avatar_path):
                 avatar_path = get_safe_avatar(role)
 
@@ -251,18 +244,16 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (100%分離 & エラー回避 & 王・宰相名自動切替) ---
+# --- 7. 自動論争ロジック (100%分離 & エラー回避 & ドラマチック・フロー) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
-        st.success("論争終了。")
+        st.success("タイムラインの更新が終了しました。")
         st.rerun()
     
     char_ids = list(characters_data.keys())
-    
     german_noble_id = next((k for k in char_ids if 'german' in k.lower()), None)
     french_noble_id = next((k for k in char_ids if ('french' in k.lower() or 'fronde' in k.lower()) or ('noble' in k.lower() and 'german' not in k.lower())), None)
-    
     louis_id = next((k for k in char_ids if 'louis' in k.lower()), None)
     minister_id = next((k for k in char_ids if 'minister' in k.lower()), None)
     huguenot_id = next((k for k in char_ids if 'huguenot' in k.lower()), None)
@@ -274,58 +265,31 @@ if st.session_state.is_running:
     if st.session_state.current_round > 1 and last_role != "citizen" and (random.random() < 0.25 or st.session_state.current_round % 4 == 0):
         current_char_id = "citizen"
     else:
-        candidates = []
-        if "三部会" in current_theme:
-            candidates = [c for c in [louis_id, minister_id, french_noble_id] if c]
-        elif "フロンド" in current_theme:
-            candidates = [c for c in [louis_id, minister_id, french_noble_id] if c]
-        elif "ナント" in current_theme:
-            # ナントの勅令廃止：ルイ14世とユグノーのみ
-            # ★ 交互に発言させて「宣言」→「嘆き」の流れを作るロジック
+        if "ナント" in current_theme:
             last_main_role = [m["role"] for m in reversed(st.session_state.messages) if m["role"] in [louis_id, huguenot_id]]
-            
-            # まだ誰も喋ってない、または最後がルイ14世なら -> ユグノーが宣言する
             if not last_main_role or last_main_role[0] == louis_id:
                 current_char_id = huguenot_id
-            # 最後がユグノーなら -> ルイ14世が嘆く
             else:
                 current_char_id = louis_id
-
-        elif luther_id and leo_id: 
-            candidates = [c for c in [luther_id, leo_id, german_noble_id] if c]
-            recent_roles = [m["role"] for m in st.session_state.messages[-2:]]
-            remaining = [c for c in candidates if c not in recent_roles]
-            current_char_id = random.choice(remaining) if remaining else random.choice(candidates)
         else:
-            candidates = char_ids
+            candidates = []
+            if "三部会" in current_theme: candidates = [c for c in [louis_id, minister_id, french_noble_id] if c]
+            elif "フロンド" in current_theme: candidates = [c for c in [louis_id, minister_id, french_noble_id] if c]
+            elif luther_id and leo_id: candidates = [c for c in [luther_id, leo_id, german_noble_id] if c]
+            else: candidates = char_ids
+            
             recent_roles = [m["role"] for m in st.session_state.messages[-2:]]
             remaining = [c for c in candidates if c not in recent_roles]
             current_char_id = random.choice(remaining) if remaining else random.choice(candidates)
-        
-        # ナント以外の場合の選出ロジック（上の分岐で決まってなければ）
-        if "ナント" not in current_theme and 'current_char_id' not in locals():
-             # fallback (should be covered by elif luther.. or else)
-             current_char_id = random.choice(candidates)
-
 
     with st.spinner(f"思考中..."):
-        # 名前決定 (AI自動投稿時)
-        if current_char_id == "citizen":
-            name = "市民のつぶやき"
-        elif 'louis' in current_char_id.lower():
-            name = get_dynamic_king_name(characters_data[current_char_id].get('name'), current_theme)
-        elif 'minister' in current_char_id.lower():
-            name = get_dynamic_minister_name(characters_data[current_char_id].get('name'), current_theme)
-        else:
-            name = characters_data[current_char_id].get('name')
-
-        # 思考回路分岐
         if current_char_id == "citizen":
             if "三部会" in current_theme: role_inst = "【重要：あなたは貧しい市民です。王や貴族ではありません】1614年の第三身分。貴族も聖職者も免税で、自分たちだけが重税を負わされる不条理に怒れ。"
             elif "フロンド" in current_theme: role_inst = "【重要：あなたは貧しい市民です】1648年のパリ市民。重税を課すマザラン枢機卿を罵り、高等法院を支持してバリケードを築け。"
-            elif "ナント" in current_theme: role_inst = "【重要：あなたは市民です】1685年の市民。異端追放を歓迎するか、経済の混乱を憂う者。"
+            elif "ナント" in current_theme: role_inst = "【重要：あなたは市民です】1685年の市民。異端追放を歓迎するか、経済の混乱を嘆くか叫べ。"
             elif "宗教改革" in current_theme: role_inst = "【重要：あなたは市民です】16世紀ドイツの市民。免罪符が高すぎると嘆く。"
             else: role_inst = "名もなき市民。"
+            name = "市民のつぶやき"
         
         elif current_char_id == louis_id:
             char = characters_data[current_char_id]
@@ -337,22 +301,26 @@ if st.session_state.is_running:
                 role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが『信仰のために国を捨てる』と宣言したことに、『余の国よりも神を選ぶというのか？』と驚愕し、嘆け。そして『だが待てよ、彼らが出て行けば、フランスの富はどうなる？』と、経済崩壊の予感に震えろ。"
             else: 
                 role_inst = f"絶頂期のルイ14世。『朕は国家なり』。異端を許さず、フランスの統一を完成させる絶対君主。"
+            name = get_dynamic_king_name(char.get('name'), current_theme)
 
         elif current_char_id == minister_id:
             char = characters_data[current_char_id]
             if "三部会" in current_theme: role_inst = f"若きリシュリュー。第三身分を利用して貴族を牽制しつつ、王権の絶対性を説け。"
             elif "フロンド" in current_theme: role_inst = f"マザラン枢機卿。貴族や民衆からの憎悪を一身に受けながら、冷徹に王家を守れ。"
             else: role_inst = f"王の側近。王の命令を冷徹に実行せよ。"
+            name = get_dynamic_minister_name(char.get('name'), current_theme)
 
         elif current_char_id == french_noble_id:
             char = characters_data[current_char_id]
             if "三部会" in current_theme: role_inst = f"1614年のフランス貴族（名門）。第三身分が貴族を『弟』と呼んだことに激怒せよ。『靴屋の息子と兄弟になった覚えはない！』と吐き捨て、特権こそが正義だと主張せよ。"
             elif "フロンド" in current_theme: role_inst = f"フロンド派の大貴族。『マザランごとき外国人が国を牛耳るとは！』と激怒し、王を取り戻すために戦う。"
             else: role_inst = f"ヴェルサイユの廷臣。王にへつらい、ご機嫌取りをする太鼓持ちになれ。"
+            name = char.get('name')
 
         elif current_char_id == german_noble_id:
             char = characters_data[current_char_id]
             role_inst = f"ドイツ諸侯。『ローマ教会にドイツの富が吸い上げられるのは我慢ならん』。ルターを保護し、教皇と皇帝の干渉を排除して自立を狙え。"
+            name = char.get('name')
 
         elif current_char_id == huguenot_id:
             char = characters_data[current_char_id]
@@ -360,23 +328,17 @@ if st.session_state.is_running:
                 role_inst = "1685年のユグノー（商工業者）。【重要：経済の話は一切するな】。『カトリックへの強制改宗は魂の死である』と訴えよ。『信仰を捨てるくらいなら、愛するフランスを捨てて亡命する』という悲壮な決意だけを投稿せよ。"
             else:
                 role_inst = f"ユグノーの商工業者。『国のために尽くしてきたのに、なぜ追い出されねばならないのか』。経済的損失を警告せよ。"
+            name = char.get('name')
 
-        elif current_char_id == luther_id:
-            char = characters_data[current_char_id]
-            role_inst = f"マルティン・ルター。カトリックの腐敗を激しく非難し、聖書のみを掲げよ。"
-        elif current_char_id == leo_id:
-            char = characters_data[current_char_id]
-            role_inst = f"教皇レオ10世。異端者ルターを断罪し、教会の権威を誇示せよ。"
-        
         else:
             char = characters_data[current_char_id]
-            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 自説を主張せよ。"
+            role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}"
+            name = char.get('name')
 
-        # stopパラメータを4つに修正済み
         system_prompt = (
             f"役割: {role_inst}\n"
             f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
-            "絶対ルール: 挨拶・解説・メタ発言（『不合格です』『理解しました』等）は一切禁止。投稿本文のみを直接出力せよ。ハッシュタグ（#）必須。"
+            "絶対ルール: 挨拶・解説・メタ発言（『不合格です』等）は一切禁止。投稿本文のみを直接出力せよ。ハッシュタグ（#）必須。"
         )
         
         context = [{"role": "system", "content": system_prompt}]
@@ -384,16 +346,14 @@ if st.session_state.is_running:
             context.append({"role": "user", "content": f"{m['name']}: {m['content']}"})
 
         try:
-            # 修正完了: response変数の定義とstopパラメータ数
             response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=1.0, stop=["不合格", "理解しました", "申し訳", "システムエラー"])
-            ai_text = response.choices[0].message.content
-            
-            clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー|回答は無効|この投稿は).*?\n?', '', ai_text).strip()
+            answer = response.choices[0].message.content
+            clean_answer = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー|回答は無効|この投稿は).*?\n?', '', answer).strip()
             
             avatar = get_safe_avatar(current_char_id)
 
-            if clean_text:
-                st.session_state.messages.append({"role": current_char_id, "name": name, "content": clean_text, "avatar": avatar})
+            if clean_answer:
+                st.session_state.messages.append({"role": current_char_id, "name": name, "content": clean_answer, "avatar": avatar})
                 st.session_state.current_round += 1
                 display_messages()
                 time.sleep(4) 
