@@ -14,7 +14,7 @@
   {
     "id": "German_Noble",
     "name": "ドイツ諸侯（貴族）",
-    "image": "german_noble.jpg",
+    "image": "German_noble.jpg",
     "persona": "神聖ローマ帝国の領邦君主。ローマへの富の流出を嫌い、ルターを利用して政治的自立を狙う野心家。"
   },
   {
@@ -32,7 +32,7 @@
   {
     "id": "French_Noble",
     "name": "フランス貴族（帯剣貴族）",
-    "image": "french_noble.jpg",
+    "image": "French_noble.jpg",
     "persona": "古来の特権を持つ大貴族。絶対王政によって権力を奪われることに抵抗し、王や宰相と対立する。"
   },
   {
@@ -42,3 +42,4 @@
     "persona": "プロテスタントの商工業者。勤勉で経済を支えているが、宗教弾圧により国を追われる危機にある。"
   }
 ]
+
