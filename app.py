@@ -4,7 +4,7 @@ import json
 import time
 import re
 import random
-import os # 画像存在チェックのために追加
+import os
 
 # --- 1. OpenAI APIキーの設定 (Secrets) ---
 try:
@@ -28,7 +28,7 @@ def load_characters():
 
 characters_data = load_characters()
 
-# --- 安全なアバター取得関数 (ここが修正の肝) ---
+# --- 安全なアバター取得関数 ---
 def get_safe_avatar(char_key):
     """画像ファイルが存在すればパスを、なければ役職に応じた絵文字を返す"""
     if char_key == "citizen":
@@ -38,13 +38,12 @@ def get_safe_avatar(char_key):
         char = characters_data[char_key]
         image_name = char.get('image')
         
-        # 画像設定があり、かつ実際にファイルが存在する場合
         if image_name:
             image_path = f"static/{image_name}"
             if os.path.exists(image_path):
                 return image_path
     
-    # 画像がない場合のフォールバック絵文字
+    # フォールバック絵文字
     if 'louis' in char_key.lower(): return "👑"
     if 'leo' in char_key.lower(): return "🇻🇦"
     if 'luther' in char_key.lower(): return "✝️"
@@ -52,7 +51,14 @@ def get_safe_avatar(char_key):
     if 'noble' in char_key.lower(): return "⚔️"
     if 'huguenot' in char_key.lower(): return "🔨"
     
-    return "🧑‍⚖️" # その他デフォルト
+    return "🧑‍⚖️" 
+
+# --- 王の名前を動的に決定する関数 ---
+def get_dynamic_king_name(base_name, current_theme):
+    if "三部会" in current_theme:
+        return "ルイ13世"
+    # フロンド、ナント、その他はルイ14世
+    return "ルイ14世"
 
 # --- 3. 画面設定 & ハッシュタグ青色化CSS (維持) ---
 st.set_page_config(page_title="歴ッター (Rekitter)", layout="wide")
@@ -136,11 +142,14 @@ with st.sidebar:
                 if selected_id == "citizen":
                     name = "市民"
                 else:
-                    name = characters_data[selected_id].get('name')
+                    char_data = characters_data[selected_id]
+                    # ここで国王の名前を動的に変換
+                    if 'louis' in selected_id.lower():
+                        name = get_dynamic_king_name(char_data.get('name'), current_theme)
+                    else:
+                        name = char_data.get('name')
                 
-                # 安全なアバター取得
                 avatar = get_safe_avatar(selected_id)
-                
                 st.session_state.messages.append({"role": selected_id, "name": name, "content": user_text, "avatar": avatar})
                 st.rerun()
 
@@ -162,11 +171,11 @@ with st.sidebar:
                         if "三部会" in current_theme: role_inst = "リシュリュー（若き司教）。第三身分を利用して貴族を牽制する。"
                         elif "フロンド" in current_theme: role_inst = "マザラン枢機卿。フロンド派の貴族を冷徹に計算して抑え込む。"
                         else: role_inst = "王の側近。王の命令を冷徹に実行する。"
-                    elif 'french_noble' in selected_id.lower() or ('noble' in selected_id.lower() and 'german' not in selected_id.lower()):
+                    elif 'French_noble' in selected_id.lower() or ('noble' in selected_id.lower() and 'german' not in selected_id.lower()):
                         if "三部会" in current_theme: role_inst = "1614年の帯剣貴族。成金や平民を見下し、古来の特権維持を叫ぶ。"
                         elif "フロンド" in current_theme: role_inst = "フロンド派の貴族。『王はマザランに騙されている』と主張し、武力で権力を取り戻そうとする。"
                         else: role_inst = "ヴェルサイユの廷臣。王にへつらう太鼓持ち。"
-                    elif 'german_noble' in selected_id.lower():
+                    elif 'German_noble' in selected_id.lower():
                         role_inst = "ドイツ諸侯。ローマへの送金を嫌い、ルターを利用して政治的自立を狙う。"
                     elif 'huguenot' in selected_id.lower():
                         role_inst = "ユグノー。信仰の自由を奪われ、亡命か改宗かの選択を迫られている。"
@@ -188,8 +197,16 @@ with st.sidebar:
                 ai_text = res.choices[0].message.content
                 clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません).*?\n?', '', ai_text).strip()
 
-                name = "市民" if selected_id == "citizen" else characters_data[selected_id].get('name')
-                # 安全なアバター取得
+                # 名前決定ロジック
+                if selected_id == "citizen":
+                    name = "市民"
+                else:
+                    char_data = characters_data[selected_id]
+                    if 'louis' in selected_id.lower():
+                        name = get_dynamic_king_name(char_data.get('name'), current_theme)
+                    else:
+                        name = char_data.get('name')
+
                 avatar = get_safe_avatar(selected_id)
 
                 if clean_text:
@@ -203,11 +220,9 @@ message_container = st.container()
 def display_messages():
     with message_container:
         for msg in reversed(st.session_state.messages):
-            # 表示時にもアバターの安全性を再確認 (過去ログのリンク切れ対策)
             role = msg["role"]
             avatar_path = msg["avatar"]
-            
-            # もしアバターが画像パスなのにファイルが消えていたら絵文字に置換
+            # アバター再確認
             if avatar_path and avatar_path.startswith("static/") and not os.path.exists(avatar_path):
                 avatar_path = get_safe_avatar(role)
 
@@ -215,7 +230,7 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (100%分離 & エラー回避) ---
+# --- 7. 自動論争ロジック (100%分離 & エラー回避 & 王名自動切替) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
@@ -254,13 +269,21 @@ if st.session_state.is_running:
         current_char_id = random.choice(remaining) if remaining else random.choice(candidates)
 
     with st.spinner(f"思考中..."):
+        # --- 名前決定ロジック ---
+        if current_char_id == "citizen":
+            name = "市民のつぶやき"
+        elif 'louis' in current_char_id.lower():
+            name = get_dynamic_king_name(characters_data[current_char_id].get('name'), current_theme)
+        else:
+            name = characters_data[current_char_id].get('name')
+
+        # --- 思考回路分岐 ---
         if current_char_id == "citizen":
             if "三部会" in current_theme: role_inst = "1614年の第三身分。貴族も聖職者も免税で、自分たちだけが重税を負わされる不条理に怒れ。"
             elif "フロンド" in current_theme: role_inst = "1648年のパリ市民。重税を課すマザラン枢機卿を罵り、高等法院を支持してバリケードを築け。"
             elif "ナント" in current_theme: role_inst = "1685年の市民。異端追放を歓迎するか、経済の混乱を嘆くか叫べ。"
             elif "宗教改革" in current_theme: role_inst = "16世紀ドイツの市民。免罪符が高すぎると嘆く。"
             else: role_inst = "名もなき市民。"
-            name = "市民のつぶやき"
         
         elif current_char_id == louis_id:
             char = characters_data[current_char_id]
@@ -270,45 +293,37 @@ if st.session_state.is_running:
                 role_inst = f"少年ルイ14世。パリの民衆に寝室まで侵入された屈辱。『王である余に対して、この無礼は何だ』と震える怒りを表現せよ。"
             else: 
                 role_inst = f"絶頂期のルイ14世。『朕は国家なり』。異端を許さず、フランスの統一を完成させる絶対君主。"
-            name = char.get('name')
 
         elif current_char_id == minister_id:
             char = characters_data[current_char_id]
             if "三部会" in current_theme: role_inst = f"若きリシュリュー。第三身分を利用して貴族を牽制しつつ、王権の絶対性を説け。"
             elif "フロンド" in current_theme: role_inst = f"マザラン枢機卿。貴族や民衆からの憎悪を一身に受けながら、冷徹に王家を守れ。"
             else: role_inst = f"王の側近。王の命令を冷徹に実行せよ。"
-            name = char.get('name')
 
-        elif current_char_id == french_noble_id:
+        elif current_char_id == French_noble_id:
             char = characters_data[current_char_id]
             if "三部会" in current_theme: role_inst = f"1614年の帯剣貴族。『平民風情が生意気だ』と第三身分を見下し、古来の特権こそが正義だと主張せよ。"
             elif "フロンド" in current_theme: role_inst = f"フロンド派の大貴族。『マザランごとき外国人が国を牛耳るとは！』と激怒し、王を取り戻すために戦う。"
             else: role_inst = f"ヴェルサイユの廷臣。王にへつらい、ご機嫌取りをする太鼓持ちになれ。"
-            name = char.get('name')
 
-        elif current_char_id == german_noble_id:
+        elif current_char_id == German_noble_id:
             char = characters_data[current_char_id]
             role_inst = f"ドイツ諸侯。『ローマ教会にドイツの富が吸い上げられるのは我慢ならん』。ルターを保護し、教皇と皇帝の干渉を排除して自立を狙え。"
-            name = char.get('name')
 
         elif current_char_id == huguenot_id:
             char = characters_data[current_char_id]
             role_inst = f"ユグノーの商工業者。『国のために尽くしてきたのに、なぜ追い出されねばならないのか』。経済的損失を警告せよ。"
-            name = char.get('name')
 
         elif current_char_id == luther_id:
             char = characters_data[current_char_id]
             role_inst = f"マルティン・ルター。カトリックの腐敗を激しく非難し、聖書のみを掲げよ。"
-            name = char.get('name')
         elif current_char_id == leo_id:
             char = characters_data[current_char_id]
             role_inst = f"教皇レオ10世。異端者ルターを断罪し、教会の権威を誇示せよ。"
-            name = char.get('name')
         
         else:
             char = characters_data[current_char_id]
             role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 自説を主張せよ。"
-            name = char.get('name')
 
         system_prompt = (
             f"### 命令: あなたは今から【{role_inst}】そのものとして振る舞い、テーマ『{current_theme}』についてSNS投稿を行います。\n"
@@ -328,7 +343,6 @@ if st.session_state.is_running:
             answer = response.choices[0].message.content
             clean_answer = re.sub(r'^(不合格です|理解しました|申し訳ありません|そのSNS投稿は|あなたの感情が|このキャラクターでの).*?\n?', '', answer).strip()
             
-            # 安全なアバター取得
             avatar = get_safe_avatar(current_char_id)
 
             if clean_answer:
