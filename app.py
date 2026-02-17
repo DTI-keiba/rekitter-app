@@ -66,7 +66,7 @@ def get_dynamic_king_name(base_name, current_theme):
         return "ルイ13世"
     return "ルイ14世"
 
-# --- 宰相の名前を動的に決定する関数 (新規追加) ---
+# --- 宰相の名前を動的に決定する関数 ---
 def get_dynamic_minister_name(base_name, current_theme):
     if "三部会" in current_theme:
         return "リシュリュー"
@@ -217,7 +217,6 @@ with st.sidebar:
 
                 name = "市民" if selected_id == "citizen" else characters_data[selected_id].get('name')
                 
-                # 名前の動的変更ロジック（王と宰相）
                 if selected_id != "citizen":
                     if 'louis' in selected_id.lower():
                         name = get_dynamic_king_name(characters_data[selected_id].get('name'), current_theme)
@@ -239,7 +238,6 @@ def display_messages():
         for msg in reversed(st.session_state.messages):
             role = msg["role"]
             avatar_path = msg["avatar"]
-            # 画像パスが存在しない場合、安全なアバターに置き換え
             if avatar_path and avatar_path.startswith("static/") and not os.path.exists(avatar_path):
                 avatar_path = get_safe_avatar(role)
 
@@ -276,7 +274,8 @@ if st.session_state.is_running:
         elif "フロンド" in current_theme:
             candidates = [c for c in [louis_id, minister_id, french_noble_id] if c]
         elif "ナント" in current_theme:
-            candidates = [c for c in [louis_id, minister_id, huguenot_id, french_noble_id] if c]
+            # 【修正箇所】ナントの勅令廃止では、ルイ14世とユグノーのみ（宰相と貴族を除外）
+            candidates = [c for c in [louis_id, huguenot_id] if c]
         elif luther_id and leo_id: 
             candidates = [c for c in [luther_id, leo_id, german_noble_id] if c]
         else:
