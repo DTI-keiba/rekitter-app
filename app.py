@@ -66,6 +66,14 @@ def get_dynamic_king_name(base_name, current_theme):
         return "ルイ13世"
     return "ルイ14世"
 
+# --- 宰相の名前を動的に決定する関数 (新規追加) ---
+def get_dynamic_minister_name(base_name, current_theme):
+    if "三部会" in current_theme:
+        return "リシュリュー"
+    elif "フロンド" in current_theme:
+        return "マザラン"
+    return "王の側近"
+
 # --- 3. 画面設定 & ハッシュタグ青色化CSS (維持) ---
 st.set_page_config(page_title="歴ッター (Rekitter)", layout="wide")
 st.markdown("""
@@ -149,8 +157,11 @@ with st.sidebar:
                     name = "市民"
                 else:
                     char_data = characters_data[selected_id]
+                    # 名前の動的変更ロジック
                     if 'louis' in selected_id.lower():
                         name = get_dynamic_king_name(char_data.get('name'), current_theme)
+                    elif 'minister' in selected_id.lower():
+                        name = get_dynamic_minister_name(char_data.get('name'), current_theme)
                     else:
                         name = char_data.get('name')
                 
@@ -193,7 +204,7 @@ with st.sidebar:
                         char = characters_data[selected_id]
                         role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}"
                 
-                # 【修正】メタ発言禁止の文言を「システム上のエラー」から「一切禁止」へ変更
+                # メタ発言禁止
                 prompt = (
                     f"役割: {role_inst}\n"
                     f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
@@ -205,8 +216,13 @@ with st.sidebar:
                 clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません|システム上のエラー).*?\n?', '', ai_text).strip()
 
                 name = "市民" if selected_id == "citizen" else characters_data[selected_id].get('name')
-                if 'louis' in selected_id.lower() and selected_id != "citizen":
-                     name = get_dynamic_king_name(characters_data[selected_id].get('name'), current_theme)
+                
+                # 名前の動的変更ロジック（王と宰相）
+                if selected_id != "citizen":
+                    if 'louis' in selected_id.lower():
+                        name = get_dynamic_king_name(characters_data[selected_id].get('name'), current_theme)
+                    elif 'minister' in selected_id.lower():
+                        name = get_dynamic_minister_name(characters_data[selected_id].get('name'), current_theme)
 
                 avatar = get_safe_avatar(selected_id)
 
@@ -231,7 +247,7 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (100%分離 & エラー回避 & 王名自動切替) ---
+# --- 7. 自動論争ロジック (100%分離 & エラー回避 & 王・宰相名自動切替) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
@@ -271,11 +287,13 @@ if st.session_state.is_running:
         current_char_id = random.choice(remaining) if remaining else random.choice(candidates)
 
     with st.spinner(f"思考中..."):
-        # 名前決定
+        # 名前決定 (AI自動投稿時)
         if current_char_id == "citizen":
             name = "市民のつぶやき"
         elif 'louis' in current_char_id.lower():
             name = get_dynamic_king_name(characters_data[current_char_id].get('name'), current_theme)
+        elif 'minister' in current_char_id.lower():
+            name = get_dynamic_minister_name(characters_data[current_char_id].get('name'), current_theme)
         else:
             name = characters_data[current_char_id].get('name')
 
@@ -327,7 +345,6 @@ if st.session_state.is_running:
             char = characters_data[current_char_id]
             role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 自説を主張せよ。"
 
-        # 【修正】メタ発言禁止プロンプトから「システム上のエラー」の文言を削除
         system_prompt = (
             f"### 命令: あなたは今から【{role_inst}】そのものとして振る舞い、テーマ『{current_theme}』についてSNS投稿を行います。\n"
             "### 制約:\n"
@@ -342,11 +359,9 @@ if st.session_state.is_running:
             context.append({"role": "user", "content": f"{m['name']}: {m['content']}"})
 
         try:
-            # stopリストに「システム上のエラー」を追加し、「不合格」などを維持
             response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=0.9, stop=["不合格", "理解しました", "申し訳", "システム上のエラー"])
             answer = response.choices[0].message.content
             
-            # クリーニング処理
             clean_answer = re.sub(r'^(不合格です|理解しました|申し訳ありません|そのSNS投稿は|あなたの感情が|このキャラクターでの|システム上のエラー).*?\n?', '', answer).strip()
             
             avatar = get_safe_avatar(current_char_id)
