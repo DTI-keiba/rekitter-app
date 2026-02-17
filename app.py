@@ -115,10 +115,11 @@ with st.sidebar:
     with c_auto:
         if st.button("🤖 AIが自動作成"):
             with st.spinner("AIが考案中..."):
+                # プロンプト作成ロジック
                 if selected_id == "citizen":
                     role_inst = "16世紀の庶民。歴史の解説者ではなく、今目の前で起きてる騒動に驚く野次馬になりきれ。"
                 else:
-                    # 貴族かどうかを判定
+                    # 貴族・ルター・教皇判定
                     if 'noble' in selected_id.lower():
                         role_inst = "ドイツ諸侯（貴族）。ローマへの送金を嫌い、教会の支配から脱却して領地の権力を強めたい政治的な野心家。"
                     elif 'luther' in selected_id.lower():
@@ -129,19 +130,31 @@ with st.sidebar:
                         char = characters_data[selected_id]
                         role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))}"
                 
-                # メタ発言完全禁止プロンプト
-                prompt = f"あなたは{role_inst}です。テーマ『{current_theme}』について、140文字以内で投稿文のみを出力しなさい。挨拶、感謝、メタ発言（『理解しました』等）は一切不要。投稿そのものだけを書きなさい。"
+                # 「不合格」を誘発する命令を削除し、純粋な出力命令のみにする
+                prompt = (
+                    f"役割: {role_inst}\n"
+                    f"タスク: テーマ『{current_theme}』について、140文字以内のSNS投稿を作成せよ。\n"
+                    "絶対ルール:\n"
+                    "1. 挨拶、返事、解説、評価コメント（『不合格です』『理解しました』等）は一切書かないこと。\n"
+                    "2. 投稿本文のみを出力すること。\n"
+                    "3. ハッシュタグ（#）を含めること。"
+                )
+                
                 res = client.chat.completions.create(model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}], max_tokens=200, temperature=1.0)
                 ai_text = res.choices[0].message.content
                 
+                # 万が一の不合格メッセージ除去
+                clean_text = re.sub(r'^(不合格です|理解しました|申し訳ありません).*?\n?', '', ai_text).strip()
+
                 if selected_id == "citizen":
                     name, avatar = "市民", "👤"
                 else:
                     char = characters_data[selected_id]
                     name, avatar = char.get('name'), f"static/{char.get('image')}"
                 
-                st.session_state.messages.append({"role": selected_id, "name": name, "content": ai_text, "avatar": avatar})
-                st.rerun()
+                if clean_text:
+                    st.session_state.messages.append({"role": selected_id, "name": name, "content": clean_text, "avatar": avatar})
+                    st.rerun()
 
 # --- 6. メイン表示エリア (最新が上) ---
 st.info(f"現在のテーマ: {current_theme} (進行状況: {st.session_state.current_round}/{max_rounds})")
@@ -154,7 +167,7 @@ def display_messages():
                 st.write(f"**{msg['name']}** @{msg['role']}")
                 st.markdown(format_content(msg["content"]), unsafe_allow_html=True)
 
-# --- 7. 自動論争ロジック (三つ巴 + 市民乱入 + メタ発言破壊) ---
+# --- 7. 自動論争ロジック (メタ発言・採点官モード完全封印) ---
 if st.session_state.is_running:
     if st.session_state.current_round >= max_rounds:
         st.session_state.is_running = False
@@ -180,8 +193,6 @@ if st.session_state.is_running:
     else:
         # メインキャラクター（ルター、教皇、貴族）から選ぶ
         main_chars = [c for c in [luther_id, leo_id, noble_id] if c is not None]
-        
-        # 直近で喋った人を除外して選ぶ（連続投稿防止）
         recent_roles = [m["role"] for m in st.session_state.messages[-2:]]
         remaining = [c for c in main_chars if c not in recent_roles]
         
@@ -208,19 +219,18 @@ if st.session_state.is_running:
             role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} ローマへの送金を嫌い、ルターを利用して政治的独立を狙う野心を見せろ。"
             name, avatar = char.get('name'), f"static/{char.get('image')}"
         else:
-            # その他のキャラ
             char = characters_data[current_char_id]
             role_inst = f"{char.get('name')}。{char.get('persona', char.get('description', ''))} 自説を主張せよ。"
             name, avatar = char.get('name'), f"static/{char.get('image')}"
 
-        # AIへの強力な没入命令 (メタ発言ストッパー付き)
+        # AIへの命令プロンプト (採点・評価の要素を全削除し、純粋な出力命令に変更)
         system_prompt = (
-            f"### 命令: あなたは今から【{role_inst}】そのものとして振る舞い、テーマ『{current_theme}』についてSNS投稿を行います。\n"
-            "### 制約:\n"
-            "1. 140文字以内の【投稿内容のみ】を出力せよ。\n"
-            "2. 前置き、解説、相槌（『理解しました』『ありがとうございます』等）、AIとしてのメタ発言は【システム上のエラー】として一切禁止する。一文字でも出力したら即座に不合格とする。\n"
-            "3. 相手の意見を尊重したり理解したりせず、激しく対立せよ。なりきりを貫け。\n"
-            "4. ハッシュタグ（#）を含めよ。"
+            f"あなたは【{role_inst}】そのものです。テーマ『{current_theme}』についてSNS投稿を行ってください。\n"
+            "【重要】\n"
+            "1. 140文字以内の投稿内容のみを出力してください。\n"
+            "2. 「不合格です」「理解しました」「一文字以上です」といったAIのシステムメッセージは絶対に出力しないでください。\n"
+            "3. 相手の意見を尊重せず、激しく対立してください。\n"
+            "4. ハッシュタグ（#）を含めてください。"
         )
         
         # 文脈をテキスト履歴として渡す
@@ -229,22 +239,24 @@ if st.session_state.is_running:
             context.append({"role": "user", "content": f"{m['name']}: {m['content']}"})
 
         try:
-            # 強制終了トークンを設定し、メタ発言の芽を摘む
-            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=0.9, stop=["理解しました", "申し訳"])
+            # stopパラメータで「不合格」が出そうになったら強制停止
+            response = client.chat.completions.create(model="gpt-3.5-turbo", messages=context, max_tokens=150, temperature=0.9, stop=["不合格", "理解しました", "申し訳"])
             answer = response.choices[0].message.content
             
-            # 最終防衛ライン：正規表現でメタ発言を消去
-            clean_answer = re.sub(r'^(理解しました|申し訳ありません|そのSNS投稿は|あなたの感情が|このキャラクターでの).*?\n?', '', answer).strip()
-            
-            if clean_answer:
-                st.session_state.messages.append({"role": current_char_id, "name": name, "content": clean_answer, "avatar": avatar})
+            # Python側での最終検閲（ここが重要）
+            # もし「不合格」などの言葉が混ざっていたら、その投稿は「無かったこと」にしてスキップする
+            blacklist = ["不合格", "理解しました", "申し訳ありません", "一文字以上", "挑戦してください"]
+            if any(word in answer for word in blacklist):
+                # エラー投稿は追加しない (UIには何も出さず、次のループで再試行させる)
+                st.session_state.is_running = True 
+                st.rerun()
+            else:
+                st.session_state.messages.append({"role": current_char_id, "name": name, "content": answer, "avatar": avatar})
                 st.session_state.current_round += 1
                 display_messages()
                 time.sleep(4) 
                 st.rerun()
-            else:
-                # 何も残らなかった場合は停止せずリトライさせるため、あえてエラーにせずスキップ（または停止）
-                st.session_state.is_running = False
+
         except Exception as e:
             st.error(f"エラー: {e}")
             st.session_state.is_running = False
