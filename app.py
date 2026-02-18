@@ -76,11 +76,23 @@ def get_dynamic_minister_name(base_name, current_theme):
 
 # --- 3. 画面設定 & ハッシュタグ青色化CSS ---
 st.set_page_config(page_title="もしツイ - もしも偉人がツイートしたら", layout="wide")
+
+# 【修正】文字サイズを教室用に大幅拡大 (24px)
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 20px; font-weight: bold; }
     .stChatMessage { border-radius: 15px; margin-bottom: 10px; border: 1px solid #f0f2f6; }
     .hashtag { color: #1DA1F2; font-weight: 500; }
+    
+    /* 教室用フォントサイズ拡大設定 */
+    .stChatMessage p {
+        font-size: 24px !important;
+        line-height: 1.6 !important;
+        font-weight: 500 !important;
+    }
+    .stMarkdown p {
+        font-size: 24px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -182,11 +194,10 @@ with st.sidebar:
                     else: role_inst = "名もなき市民。野次馬。"
                 else:
                     if 'louis' in selected_id.lower():
-                        if "三部会" in current_theme: role_inst = "13歳のルイ13世。『貴族どもは特権ばかり主張して文句が多く、本当にうざい』。三部会など時間の無駄であり、『そもそもこんなもの開かなくても、余と母上がいれば政治は回るのだ』と、不機嫌に断言せよ。"
+                        if "三部会" in current_theme: role_inst = "13歳のルイ13世。『貴族どもは特権ばかり主張して文句が多く、本当にうざい』。三部会など時間の無駄であり、『そもそもこんなもの開かなくても、余と母上がいれば政治は回るのだ』と、議会不要論を不機嫌につぶやけ。"
                         elif "フロンド" in current_theme: role_inst = "ルイ14世（少年期）。パリを追われた屈辱を忘れず、王権への反逆を心に刻む。"
                         elif "ナント" in current_theme: 
-                            # 【修正】ルイ14世の反応ロジック：信仰を捨てずに国を捨てることへの動揺
-                            role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが『信仰を捨てずに国を捨てる』という選択をしたことに激しく動揺せよ。『余の与える恩恵よりも、異端の信仰の方が大事だと言うのか？』とプライドを傷つけられ、驚愕する。そして『彼らが去れば、フランスの富も消える...』と経済的破滅の予感に震えろ。"
+                            role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが『信仰のために国を捨てる』と宣言したことに、『余の国よりも神を選ぶというのか？』と驚愕し、嘆け。そして『だが待てよ、彼らが出て行けば、フランスの富はどうなる？』と、経済崩壊の予感に震えろ。"
                         else: role_inst = "ルイ14世（太陽王）。『朕は国家なり』。異端を許さず、フランスの統一を完成させる絶対君主。"
                     elif 'minister' in selected_id.lower():
                         if "三部会" in current_theme: role_inst = "リシュリュー（若き司教）。第三身分を利用して貴族を牽制する。"
@@ -278,7 +289,8 @@ if st.session_state.is_running:
     else:
         candidates = []
         if "三部会" in current_theme:
-            candidates = [c for c in [louis_id, minister_id, french_noble_id] if c]
+            # 【修正】三部会では「ルイ13世」「貴族」のみ（宰相リシュリューを除外）
+            candidates = [c for c in [louis_id, french_noble_id] if c]
         elif "フロンド" in current_theme:
             candidates = [c for c in [louis_id, minister_id, french_noble_id] if c]
         elif "ナント" in current_theme:
@@ -318,19 +330,20 @@ if st.session_state.is_running:
         if current_char_id == "citizen":
             if "三部会" in current_theme: role_inst = "【重要：あなたは貧しい市民です。王や貴族ではありません】1614年の第三身分。貴族の横暴と重税に苦しみ、王に救済を求める陳情者。"
             elif "フロンド" in current_theme: role_inst = "【重要：あなたは貧しい市民です】1648年のパリ市民。重税を課すマザラン枢機卿を罵り、高等法院を支持してバリケードを築け。"
-            elif "ナント" in current_theme: role_inst = "【重要：あなたは市民です】1685年の市民。異端追放を歓迎するか、経済の混乱を憂う者。"
+            elif "ナント" in current_theme: role_inst = "【重要：あなたは市民です】1685年の市民。異端追放を歓迎するか、経済の混乱を嘆くか叫べ。"
             elif "宗教改革" in current_theme: role_inst = "【重要：あなたは市民です】16世紀ドイツの市民。免罪符が高すぎると嘆く。"
             else: role_inst = "名もなき市民。"
         
         elif current_char_id == louis_id:
             char = characters_data[current_char_id]
             if "三部会" in current_theme:
+                # 【厳密化】ルイ13世の思考
                 role_inst = f"13歳のルイ13世。『貴族どもは特権ばかり主張して文句が多く、本当にうざい』。三部会など時間の無駄であり、『そもそもこんなもの開かなくても、余と母上がいれば政治は回るのだ』と、不機嫌に断言せよ。"
             elif "フロンド" in current_theme:
                 role_inst = f"少年ルイ14世。パリの民衆に寝室まで侵入された屈辱。『王である余に対して、この無礼は何だ』と震える怒りを表現せよ。"
             elif "ナント" in current_theme:
-                # 【修正】ルイ14世の反応ロジック：信仰を捨てずに国を捨てることへの動揺
-                role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが『信仰を捨てずに国を捨てる』という選択をしたことに激しく動揺せよ。『余の与える恩恵よりも、異端の信仰の方が大事だと言うのか？』とプライドを傷つけられ、驚愕する。そして『彼らが去れば、フランスの富も消える...』と経済的破滅の予感に震えろ。"
+                # ドラマチック・フロー（嘆き）
+                role_inst = "1685年のルイ14世（太陽王）。ユグノーたちが『信仰のために国を捨てる』と宣言したことに、『余の国よりも神を選ぶというのか？』と驚愕し、嘆け。そして『だが待てよ、彼らが出て行けば、フランスの富はどうなる？』と、経済崩壊の予感に震えろ。"
             else: 
                 role_inst = f"絶頂期のルイ14世。『朕は国家なり』。異端を許さず、フランスの統一を完成させる絶対君主。"
 
@@ -342,7 +355,9 @@ if st.session_state.is_running:
 
         elif current_char_id == french_noble_id:
             char = characters_data[current_char_id]
-            if "三部会" in current_theme: role_inst = f"1614年のフランス貴族（名門）。第三身分が貴族を『弟』と呼んだことに激怒せよ。『靴屋の息子と兄弟になった覚えはない！』と吐き捨て、特権こそが正義だと主張せよ。"
+            if "三部会" in current_theme:
+                # 【厳密化】フランス貴族の思考
+                role_inst = f"1614年のフランス貴族（名門）。第三身分が貴族を『弟』と呼んだことに激怒せよ。『靴屋の息子と兄弟になった覚えはない！』と吐き捨て、特権こそが正義だと主張せよ。"
             elif "フロンド" in current_theme: role_inst = f"フロンド派の大貴族。『マザランごとき外国人が国を牛耳るとは！』と激怒し、王を取り戻すために戦う。"
             else: role_inst = f"ヴェルサイユの廷臣。王にへつらい、ご機嫌取りをする太鼓持ちになれ。"
 
